@@ -1,0 +1,10 @@
+export { DashboardPage } from "./dashboard";
+export { TasksPage } from "./tasks";
+export { FinancePage } from "./finance";
+export { RecipesPage } from "./recipes";
+export { HealthPage } from "./health";
+export { DiaryPage, DiaryEntryPage } from "./diary";
+export { NotesPage, DocPage } from "./notes";
+export { FocusPage } from "./focus";
+export { EnglishPage } from "./english";
+export { LibraryPage, BookPage } from "./library";

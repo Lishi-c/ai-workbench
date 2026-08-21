@@ -1,0 +1,59 @@
+# 依赖
+node_modules
+
+# 构建产物
+dist
+dist-ssr
+release
+output
+.vite
+.vite_cache
+.native-wind-cache
+
+# 个人数据 & 凭据（绝不上传）
+data
+.env
+.env.*
+
+# 秒哒平台残留
+.skills
+/.skills
+supabase
+.rules
+sgconfig.yml
+historical_context.txt
+.sync
+/tasks
+docs
+worker
+
+# pnpm（本项目用 npm）
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# 日志
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# 其它
+*.local
+package.json.[0-9]*
+playwright-report
+test-results
+history/*.json
+
+# 编辑器
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
