@@ -24,7 +24,6 @@ sgconfig.yml
 historical_context.txt
 .sync
 /tasks
-docs
 worker
 
 # pnpm（本项目用 npm）
