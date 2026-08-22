@@ -10,8 +10,14 @@ asar: true
 npmRebuild: false
 win:
   target:
-    - portable
+    - nsis
   icon: build/icon.ico
   signExecutable: false
-portable:
-  artifactName: ${productName}-v${version}.exe
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 月蓝琉璃工作台
+  artifactName: ${productName}-Setup-v${version}.exe

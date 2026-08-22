@@ -1,6 +1,6 @@
 {
   "name": "lumi-workbench",
-  "version": "0.0.30",
+  "version": "0.0.32",
   "description": "月蓝琉璃工作台——本地优先的个人工作台（任务、财务、健康、成长）",
   "author": "Lumi",
   "type": "module",
@@ -14,7 +14,7 @@
     "clean:release": "node scripts/clean-release.cjs",
     "build:icon": "node scripts/make-icon.cjs",
     "start": "electron .",
-    "dist": "node scripts/bump-version.cjs && npm run build:web && electron-builder --win portable"
+    "dist": "node scripts/bump-version.cjs && npm run build:web && electron-builder --win"
   },
   "dependencies": {
     "@radix-ui/react-accordion": "^1.2.12",

@@ -11,7 +11,7 @@ if (!fs.existsSync(releaseDir)) { console.log("release 目录不存在"); proces
 const versioned = [];
 const others = [];
 for (const name of fs.readdirSync(releaseDir)) {
-  if (/^月蓝琉璃工作台-v[\d.]+\.exe$/.test(name)) versioned.push(name);
+  if (/^月蓝琉璃工作台(-Setup)?-v[\d.]+\.exe$/.test(name)) versioned.push(name);
   else if (/\.exe$/.test(name) || /\.7z$/.test(name)) others.push(name);
 }
 
