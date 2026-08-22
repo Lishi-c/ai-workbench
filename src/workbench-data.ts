@@ -126,6 +126,7 @@ export type WorkbenchData = {
     fontScale: number;
     reminderAdvanceMinutes: number;
     theme: "light" | "dark";
+    autoLaunch: boolean;
   };
   tasks: WorkbenchTask[];
   schedule: ScheduleItem[];
@@ -173,14 +174,15 @@ export function createDefaultWorkbenchData(): WorkbenchData {
   return {
     version: 1,
     settings: {
-      displayName: "秒小哒",
-      workspaceTitle: "秒小哒的工作台",
+      displayName: "master",
+      workspaceTitle: "master的工作台",
       workspaceSubtitle: "TODAY · GOOD DAY",
       weeklyTaskGoal: 20,
       monthlyBudget: 6000,
-      fontScale: 1,
+      fontScale: 1.15,
       reminderAdvanceMinutes: 0,
       theme: "light",
+      autoLaunch: true,
     },
     tasks: [
       { id: "task-1", title: "整理工作台页面架构", meta: "个人项目", date: today, time: "09:30", tag: "设计", tone: "purple", done: true, focusMinutes: 80 },

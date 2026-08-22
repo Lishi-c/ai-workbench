@@ -9,6 +9,13 @@ app.setName("月蓝琉璃工作台");
 // Windows 通知需要有效的 AppUserModelID（对应 electron-builder 的 appId）
 app.setAppUserModelId("com.lumi.workbench");
 
+// 数据目录：打包版放到 exe 旁边的 data/ 文件夹（便携、不占系统盘 AppData）；开发版保持默认
+const OLD_USER_DATA = app.getPath("userData");
+if (app.isPackaged) {
+  const exePath = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+  app.setPath("userData", path.join(path.dirname(exePath), "data"));
+}
+
 const HOST = "127.0.0.1";
 const MAX_BACKUPS = 10;
 // 每次启动随机生成，前端请求 /api/* 时需携带，防止本机其它进程读写数据
@@ -36,6 +43,21 @@ function dateKey(d = new Date()) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+// 从旧位置（系统盘 AppData）迁移数据到新位置（exe 旁边的 data/），仅当新位置无数据时执行
+function migrateFromAppData() {
+  try {
+    const newRoot = app.getPath("userData");
+    if (OLD_USER_DATA === newRoot) return;
+    if (!fs.existsSync(path.join(OLD_USER_DATA, "workbench-data.json"))) return;
+    if (fs.existsSync(dataFile())) return;
+    fs.mkdirSync(newRoot, { recursive: true });
+    fs.cpSync(OLD_USER_DATA, newRoot, { recursive: true });
+    console.log("已从系统 AppData 迁移数据到 exe 目录");
+  } catch (err) {
+    console.error("AppData 迁移失败：", err);
+  }
 }
 
 // 首次运行迁移：把原项目 data/ 里的历史数据复制过来（仅当目标不存在）
@@ -291,6 +313,7 @@ function handleApi(req, res) {
           }
           splitContent(parsed);
           writeData(parsed);
+          applyAutoLaunch(parsed);
           res.end(JSON.stringify({ ok: true }));
         } catch {
           res.statusCode = 400;
@@ -436,6 +459,20 @@ function createTray() {
   tray.on("click", () => showWindow());
 }
 
+// 开机自启：按设置里的 autoLaunch 开关登记/取消登录启动项。
+// 便携版 exe 会把真实程序解压到临时目录运行，process.execPath 指向临时目录（退出即被清理），
+// 必须显式指向用户手里的 portable exe 才能正确注册；缺省（未设置过）视为开启，保持旧版行为。
+function applyAutoLaunch(data) {
+  if (!app.isPackaged) return;
+  const exe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+  const openAtLogin = data?.settings?.autoLaunch !== false;
+  try {
+    app.setLoginItemSettings({ openAtLogin, path: exe });
+  } catch (err) {
+    console.error("开机自启设置失败：", err);
+  }
+}
+
 function showStartupReminder() {
   try {
     const data = readData();
@@ -533,11 +570,12 @@ if (!gotLock) {
   app.on("second-instance", () => showWindow());
 
   app.whenReady().then(async () => {
+    migrateFromAppData();
     migrateData();
     migrateContentSplit();
     dailyBackup();
     loadNotified(dateKey());
-    if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: true });
+    applyAutoLaunch(readData());
 
     const server = await startServer();
     const addr = server.address();
