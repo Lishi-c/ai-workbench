@@ -1,0 +1,12 @@
+# 国内镜像：cargo 下载 crates.io 依赖走 rsproxy.cn，避免直连 crates.io 超时
+[source.crates-io]
+replace-with = "rsproxy-sparse"
+
+[source.rsproxy-sparse]
+registry = "sparse+https://rsproxy.cn/index/"
+
+[registries.rsproxy]
+index = "sparse+https://rsproxy.cn/index/"
+
+[net]
+git-fetch-with-cli = true

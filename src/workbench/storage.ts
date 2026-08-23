@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { WorkbenchData } from "../workbench-data";
 import type { HolidayMap } from "./calendar-festivals";
 
@@ -16,8 +17,10 @@ export async function readTextFile(file: File): Promise<string> {
 
 const STORAGE_KEY = "lumi-workbench-data";
 const API_URL = "/api/workbench-data";
+// Tauri 环境探测：Tauri v2 会在 window 上挂 __TAURI_INTERNALS__；Electron 无此标记
+const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
-// Electron 主进程把随机 token 放在 URL query 里，请求时作为 header 带回；开发模式（vite）无 token 则不带
+// 旧 Electron 版把随机 token 放在 URL query 里；现在仅 vite 开发模式（无 token）会走到这个 fetch 回退分支
 function authHeaders(): Record<string, string> {
   const token = new URLSearchParams(window.location.search).get("t");
   return token ? { "x-auth-token": token } : {};
@@ -26,6 +29,11 @@ function authHeaders(): Record<string, string> {
 export type LoadResult = { data: WorkbenchData | null; restored: boolean };
 
 export async function loadLocalData(): Promise<LoadResult> {
+  if (isTauri) {
+    try {
+      return await invoke<LoadResult>("load_data");
+    } catch { /* 落到下方 localStorage 回退 */ }
+  }
   try {
     const res = await fetch(API_URL, { headers: authHeaders() });
     if (res.ok) {
@@ -44,6 +52,13 @@ export async function loadLocalData(): Promise<LoadResult> {
 }
 
 export async function saveLocalData(value: WorkbenchData): Promise<boolean> {
+  if (isTauri) {
+    try {
+      return await invoke<boolean>("save_data", { value });
+    } catch {
+      return false;
+    }
+  }
   try {
     const res = await fetch(API_URL, { method: "PUT", headers: { "content-type": "application/json", ...authHeaders() }, body: JSON.stringify(value) });
     return res.ok;
@@ -54,6 +69,13 @@ export async function saveLocalData(value: WorkbenchData): Promise<boolean> {
 }
 
 export async function fetchContentText(type: string, id: string): Promise<string> {
+  if (isTauri) {
+    try {
+      return await invoke<string>("get_content", { kind: type, id });
+    } catch {
+      return "";
+    }
+  }
   try {
     const res = await fetch(`/api/content?type=${type}&id=${encodeURIComponent(id)}`, { headers: authHeaders() });
     if (res.ok) {
@@ -65,6 +87,14 @@ export async function fetchContentText(type: string, id: string): Promise<string
 }
 
 export async function fetchHolidays(year: number): Promise<HolidayMap> {
+  if (isTauri) {
+    try {
+      const payload = await invoke<{ holiday: HolidayMap }>("get_holidays", { year });
+      return payload.holiday ?? {};
+    } catch {
+      return {};
+    }
+  }
   try {
     const res = await fetch(`/api/holidays?year=${year}`, { headers: authHeaders() });
     if (res.ok) {
