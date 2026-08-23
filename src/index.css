@@ -1014,7 +1014,7 @@ textarea:focus-visible {
 .mood-options button.active { background-image: linear-gradient(rgba(255,255,255,.2), rgba(255,255,255,.2)); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); color: var(--purple-deep); }
 .mood-options button.active span { background: rgba(255,255,255,.7); color: var(--purple-deep); }
 .mood-options button > i { position: absolute; top: 8px; right: 8px; display: grid; width: 18px; height: 18px; place-items: center; border-radius: 50%; background: white; color: var(--purple); }
-.diary-grid { display: grid; align-items: start; grid-template-columns: minmax(0,1.35fr) minmax(290px,.65fr); gap: 22px; }
+.diary-grid { display: grid; grid-template-columns: minmax(0,1.35fr) minmax(290px,.65fr); gap: 22px; }
 .calendar-nav { display: flex; gap: 6px; }
 .calendar-nav .icon-button { width: 31px; height: 31px; border-radius: 10px; }
 .calendar-week, .calendar-days { display: grid; grid-template-columns: repeat(7,1fr); gap: 5px; }
@@ -1080,7 +1080,7 @@ textarea:focus-visible {
 .recent-notes-search svg { flex: 0 0 auto; color: var(--ink-soft); }
 .recent-notes-search input { min-width: 0; flex: 1; border: 0; outline: none; background: transparent; color: var(--ink); font-size: 13px; }
 .recent-notes-search input::placeholder { color: var(--ink-soft); }
-.recent-notes-list { display: flex; min-height: 0; flex-direction: column; gap: 6px; margin-top: 12px; overflow-y: auto; }
+.recent-notes-list { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 6px; margin-top: 12px; overflow-y: auto; }
 .recent-notes-list::-webkit-scrollbar { width: 6px; }
 .recent-notes-list::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--lilac); }
 .recent-note { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; padding: 9px 10px; border: 0; border-radius: 12px; background: var(--lilac-soft); cursor: pointer; text-align: left; flex: 0 0 auto; }
