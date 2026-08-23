@@ -1,6 +1,6 @@
-import { Check, ChevronLeft, ChevronRight, MessageCircleHeart, PenLine, Plus, Quote, RotateCcw, Sparkles, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { createId, dateKey, type MoodId } from "../../workbench-data";
+import { Check, ChevronLeft, ChevronRight, MessageCircleHeart, PenLine, Plus, Quote, RotateCcw, Search, Sparkles, Trash2, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createId, dateKey, type DiaryEntry, type MoodId } from "../../workbench-data";
 import { moods, useWorkbench } from "../context";
 import { renderMarkdown, MdToolbar } from "./md";
 import { getDateLabel } from "../calendar-festivals";
@@ -12,6 +12,40 @@ function buildCalendar(cursor: Date) {
   const first = new Date(year, month, 1).getDay();
   const blanks = first === 0 ? 6 : first - 1;
   return [...Array.from({ length: blanks }, () => null), ...Array.from({ length: days }, (_, index) => index + 1)];
+}
+
+function highlightText(text: string, keyword: string) {
+  if (!keyword) return text;
+  const lower = text.toLowerCase();
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  for (let hit = lower.indexOf(keyword); hit >= 0; hit = lower.indexOf(keyword, cursor)) {
+    if (hit > cursor) nodes.push(text.slice(cursor, hit));
+    nodes.push(<mark className="note-hit" key={`${hit}-${nodes.length}`}>{text.slice(hit, hit + keyword.length)}</mark>);
+    cursor = hit + keyword.length;
+  }
+  nodes.push(text.slice(cursor));
+  return nodes;
+}
+
+function RecentNotes({ entries, onOpen }: { entries: DiaryEntry[]; onOpen: (id: string) => void }) {
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (searchOpen) inputRef.current?.focus(); }, [searchOpen]);
+  const closeSearch = () => { setSearchOpen(false); setQuery(""); };
+  const keyword = query.trim().toLowerCase();
+  const sorted = [...entries].sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`));
+  const visible = keyword ? sorted.filter((entry) => entry.title.toLowerCase().includes(keyword) || entry.date.includes(keyword) || entry.content.toLowerCase().includes(keyword)) : sorted;
+  return <article className="panel recent-notes">
+    <SectionTitle eyebrow={keyword ? "SEARCH" : "RECENT"} title={keyword ? `搜索结果 · ${visible.length} 篇` : "最近记录"} action={<IconButton label={searchOpen ? "关闭搜索" : "搜索日记"} className="recent-notes-toggle" onClick={() => (searchOpen ? closeSearch() : setSearchOpen(true))}>{searchOpen ? <X size={16} /> : <Search size={16} />}</IconButton>} />
+    {searchOpen && <div className="recent-notes-search"><Search size={14} /><input ref={inputRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索日期或标题…" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); closeSearch(); } }} /></div>}
+    <div className="recent-notes-list">
+      {!entries.length ? <p className="recent-notes-empty">还没有日记，点「今日记录」写下第一篇</p>
+        : !visible.length ? <p className="recent-notes-empty">没有找到匹配的日记</p>
+          : visible.map((entry) => { const moodIndex = moods.findIndex((m) => m.id === entry.mood); return <button type="button" className="recent-note" key={entry.id} onClick={() => onOpen(entry.id)}><i className={`recent-note-dot mood-dot-${moodIndex}`} /><span className="recent-note-copy"><strong>{highlightText(entry.title || "无标题", keyword)}</strong><small>{highlightText(`${entry.date} · ${entry.time}`, keyword)}</small></span><ChevronRight size={14} /></button>; })}
+    </div>
+  </article>;
 }
 
 export function DiaryPage() {
@@ -28,9 +62,22 @@ export function DiaryPage() {
   const moveMonth = (offset: number) => setCursor((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
   const cursorYear = cursor.getFullYear();
   useEffect(() => { loadHolidays(cursorYear); }, [cursorYear, loadHolidays]);
+  const calendarRef = useRef<HTMLElement>(null);
+  const [sideHeight, setSideHeight] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const element = calendarRef.current;
+    if (!element) return;
+    const stacked = window.matchMedia("(max-width: 920px)");
+    const sync = () => { const height = element.getBoundingClientRect().height; setSideHeight(stacked.matches || height <= 0 ? null : height); };
+    const observer = new ResizeObserver(sync);
+    observer.observe(element);
+    stacked.addEventListener("change", sync);
+    sync();
+    return () => { observer.disconnect(); stacked.removeEventListener("change", sync); };
+  }, [viewingDiaryId, draftDate]);
   if (viewingDiaryId) return <DiaryEntryPage entryId={viewingDiaryId} onBack={() => setViewingDiaryId(null)} />;
   if (draftDate) return <DiaryEntryPage newDate={draftDate} onBack={() => setDraftDate(null)} />;
-  return <div className="page-stack page-enter"><PageIntro eyebrow="DEAR DIARY" title="收好今天的心情" copy="心情选项、心情日历与日记使用同一套四种状态，不再出现名称错位。" actions={<button className="button button-primary" onClick={() => setDraftDate(today)}><Plus size={17} /> 今日记录</button>} /><section className="mood-checkin panel-lilac"><div><span className="section-eyebrow">MOOD CHECK-IN</span><h2>此刻的你，感觉怎么样？</h2><p>选择后会立刻写入今天的心情日历。</p></div><div className="mood-options">{moods.map((item) => { const Icon = item.icon; const active = data.moodLogs[today] === item.id; return <button type="button" key={item.id} className={`${active ? "active" : ""} tone-${item.tone}`} onClick={() => chooseMood(item.id)}><span><Icon size={23} /></span><strong>{item.label}</strong>{active && <i><Check size={11} /></i>}</button>; })}</div></section><section className="diary-grid"><article className="panel mood-calendar"><SectionTitle eyebrow={`${cursor.getFullYear()} · ${String(cursor.getMonth() + 1).padStart(2, "0")}`} title="心情日历" action={<div className="calendar-nav"><IconButton label="上个月" onClick={() => moveMonth(-1)}><ChevronLeft size={16} /></IconButton><IconButton label="下个月" onClick={() => moveMonth(1)}><ChevronRight size={16} /></IconButton></div>} /><div className="calendar-week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div className="calendar-days">{days.map((day, index) => { const key = day ? `${cursorPrefix}-${String(day).padStart(2, "0")}` : ""; const mood = day ? data.moodLogs[key] : undefined; const moodIndex = moods.findIndex((item) => item.id === mood); const diaryEntry = day ? data.diaryEntries.find((e) => e.date === key) : undefined; const hasDiary = !!diaryEntry; const diaryTitle = diaryEntry?.title ?? ""; const label = day ? getDateLabel(holidays, key) : null; return <button type="button" className={`${key === today ? "today" : ""} ${mood ? `has-mood mood-${moodIndex}` : ""} ${hasDiary ? "has-diary" : ""}`} key={`${key}-${index}`} disabled={!day} onClick={() => { if (!day) return; const entry = data.diaryEntries.find((e) => e.date === key); if (entry) setViewingDiaryId(entry.id); else setDraftDate(key); }} title={hasDiary ? "查看日记" : (mood ? moods[moodIndex].label : "写日记")}>{hasDiary && <small className="diary-day-title">{diaryTitle || "日记"}</small>}<span>{day ?? ""}</span>{label && <small className={`festival-label${label.workday ? " is-workday" : ""}`}>{label.text}</small>}</button>; })}</div><div className="calendar-legend">{moods.map((item, index) => <span key={item.id}><i className={`mood-${index}`} />{item.label}</span>)}</div></article><aside className="diary-side"><article className="quote-card panel-purple"><Quote size={27} /><p>“平凡的一天，也会因为被认真感受而闪闪发光。”</p><span>今日寄语</span><Sparkles className="quote-sparkle" size={20} /></article><article className="panel writing-prompt"><span className="prompt-icon"><MessageCircleHeart size={20} /></span><div><small>今日书写灵感</small><strong>{prompts[promptIndex]}</strong></div><button type="button" onClick={() => setPromptIndex((value) => (value + 1) % prompts.length)}><RotateCcw size={15} /> 换一个</button></article><article className="panel recent-notes"><SectionTitle eyebrow="RECENT" title="最近记录" /><div className="recent-notes-list">{[...data.diaryEntries].sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`)).slice(0, 3).map((entry) => { const moodIndex = moods.findIndex((m) => m.id === entry.mood); return <button type="button" className="recent-note" key={entry.id} onClick={() => setViewingDiaryId(entry.id)}><i className={`recent-note-dot mood-dot-${moodIndex}`} /><span className="recent-note-copy"><strong>{entry.title || "无标题"}</strong><small>{entry.date} · {entry.time}</small></span><ChevronRight size={14} /></button>; })}</div>{!data.diaryEntries.length && <p className="recent-notes-empty">还没有日记，点「今日记录」写下第一篇</p>}</article></aside></section></div>;
+  return <div className="page-stack page-enter"><PageIntro eyebrow="DEAR DIARY" title="收好今天的心情" copy="心情选项、心情日历与日记使用同一套四种状态，不再出现名称错位。" actions={<button className="button button-primary" onClick={() => setDraftDate(today)}><Plus size={17} /> 今日记录</button>} /><section className="mood-checkin panel-lilac"><div><span className="section-eyebrow">MOOD CHECK-IN</span><h2>此刻的你，感觉怎么样？</h2><p>选择后会立刻写入今天的心情日历。</p></div><div className="mood-options">{moods.map((item) => { const Icon = item.icon; const active = data.moodLogs[today] === item.id; return <button type="button" key={item.id} className={`${active ? "active" : ""} tone-${item.tone}`} onClick={() => chooseMood(item.id)}><span><Icon size={23} /></span><strong>{item.label}</strong>{active && <i><Check size={11} /></i>}</button>; })}</div></section><section className="diary-grid"><article className="panel mood-calendar" ref={calendarRef}><SectionTitle eyebrow={`${cursor.getFullYear()} · ${String(cursor.getMonth() + 1).padStart(2, "0")}`} title="心情日历" action={<div className="calendar-nav"><IconButton label="上个月" onClick={() => moveMonth(-1)}><ChevronLeft size={16} /></IconButton><IconButton label="下个月" onClick={() => moveMonth(1)}><ChevronRight size={16} /></IconButton></div>} /><div className="calendar-week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div className="calendar-days">{days.map((day, index) => { const key = day ? `${cursorPrefix}-${String(day).padStart(2, "0")}` : ""; const mood = day ? data.moodLogs[key] : undefined; const moodIndex = moods.findIndex((item) => item.id === mood); const diaryEntry = day ? data.diaryEntries.find((e) => e.date === key) : undefined; const hasDiary = !!diaryEntry; const diaryTitle = diaryEntry?.title ?? ""; const label = day ? getDateLabel(holidays, key) : null; return <button type="button" className={`${key === today ? "today" : ""} ${mood ? `has-mood mood-${moodIndex}` : ""} ${hasDiary ? "has-diary" : ""}`} key={`${key}-${index}`} disabled={!day} onClick={() => { if (!day) return; const entry = data.diaryEntries.find((e) => e.date === key); if (entry) setViewingDiaryId(entry.id); else setDraftDate(key); }} title={hasDiary ? "查看日记" : (mood ? moods[moodIndex].label : "写日记")}>{hasDiary && <small className="diary-day-title">{diaryTitle || "日记"}</small>}<span>{day ?? ""}</span>{label && <small className={`festival-label${label.workday ? " is-workday" : ""}`}>{label.text}</small>}</button>; })}</div><div className="calendar-legend">{moods.map((item, index) => <span key={item.id}><i className={`mood-${index}`} />{item.label}</span>)}</div></article><aside className="diary-side" style={sideHeight ? { height: sideHeight } : undefined}><article className="quote-card panel-purple"><Quote size={27} /><p>“平凡的一天，也会因为被认真感受而闪闪发光。”</p><span>今日寄语</span><Sparkles className="quote-sparkle" size={20} /></article><article className="panel writing-prompt"><span className="prompt-icon"><MessageCircleHeart size={20} /></span><div><small>今日书写灵感</small><strong>{prompts[promptIndex]}</strong></div><button type="button" onClick={() => setPromptIndex((value) => (value + 1) % prompts.length)}><RotateCcw size={15} /> 换一个</button></article><RecentNotes entries={data.diaryEntries} onOpen={setViewingDiaryId} /></aside></section></div>;
 }
 
 export function DiaryEntryPage({ entryId, newDate, onBack }: { entryId?: string; newDate?: string; onBack: () => void }) {
