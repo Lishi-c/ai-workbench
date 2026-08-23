@@ -8,11 +8,17 @@ files:
   - "!node_modules/**"
 asar: true
 npmRebuild: false
+# 只打包中/英语言包，裁掉其余 53 种（解压后省约 46MB）
+electronLanguages:
+  - zh-CN
+  - en-US
 win:
   target:
     - nsis
   icon: build/icon.ico
   signExecutable: false
+  # 最高压缩比（打包更慢但体积更小）
+  compression: maximum
 nsis:
   oneClick: false
   perMachine: false
