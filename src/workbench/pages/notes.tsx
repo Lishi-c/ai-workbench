@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, Folder, FolderPlus, GripVertical, PenLine, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Folder, FolderPlus, PenLine, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createId, dateKey, type Document, type NoteFolder, type Tone, type WorkbenchData } from "../../workbench-data";
 import { useWorkbench } from "../context";
@@ -174,6 +174,21 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
   const [dropInto, setDropInto] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
 
+  // 拖拽实时值走 ref（供原生 window 监听器读取），state 仅用于渲染反馈
+  const dataRef = useRef(data); dataRef.current = data;
+  const folderIdRef = useRef(currentFolderId); folderIdRef.current = currentFolderId;
+  const dragRef = useRef<{ kind: "folder" | "doc"; id: string } | null>(null);
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null);
+  const didDragRef = useRef(false);
+  const suppressClickRef = useRef(false);
+  const dropIntoRef = useRef<string | null>(null);
+  const dropIndexRef = useRef<number | null>(null);
+  const applyDrop = (into: string | null, index: number | null) => {
+    if (dropIntoRef.current === into && dropIndexRef.current === index) return;
+    dropIntoRef.current = into; dropIndexRef.current = index;
+    setDropInto(into); setDropIndex(index);
+  };
+
   useLayoutEffect(() => {
     if (openDocId && data.documents.some((d) => d.id === openDocId)) { setViewingDocId(openDocId); setNewNote(false); onDocHandled?.(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -188,6 +203,73 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, [exportOpen]);
+
+  // 拖拽全走原生 window 监听器（不依赖 React 合成事件，WebView2 下可靠）
+  useEffect(() => {
+    const onPointerMove = (event: PointerEvent) => {
+      if (!dragStartRef.current) return;
+      if (!didDragRef.current) {
+        if (Math.hypot(event.clientX - dragStartRef.current.x, event.clientY - dragStartRef.current.y) < 6) return;
+        didDragRef.current = true;
+        setDrag(dragRef.current);
+        document.body.style.userSelect = "none";
+        document.body.style.cursor = "grabbing";
+      }
+      const info = dragRef.current;
+      if (!info) return;
+      const el = event.target as Element | null;
+      const zone = el ? (el.closest(".drop-zone") as HTMLElement | null) : null;
+      if (!zone) { applyDrop(null, null); return; }
+      const zoneType = zone.getAttribute("data-zone");
+      const cardKind = zone.getAttribute("data-card-kind");
+      const cardId = zone.getAttribute("data-card-id");
+      const cardIndex = Number(zone.getAttribute("data-card-index") ?? "-1");
+      if (!zoneType || !cardKind || !cardId || cardIndex < 0) { applyDrop(null, null); return; }
+      if (cardKind === info.kind && cardId === info.id) { applyDrop(null, null); return; }
+      if (zoneType === "into") {
+        if (info.kind === "folder" && isDescendant(dataRef.current, info.id, cardId)) { applyDrop(null, cardIndex); return; }
+        applyDrop(cardId, null);
+      } else if (zoneType === "before") {
+        applyDrop(null, cardIndex);
+      } else if (zoneType === "after") {
+        applyDrop(null, cardIndex + 1);
+      } else {
+        applyDrop(null, null);
+      }
+    };
+    const onPointerUp = () => {
+      const info = dragRef.current;
+      const didDrag = didDragRef.current;
+      const into = dropIntoRef.current;
+      const index = dropIndexRef.current;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+      dragStartRef.current = null;
+      didDragRef.current = false;
+      dragRef.current = null;
+      applyDrop(null, null);
+      setDrag(null);
+      if (didDrag && info) {
+        suppressClickRef.current = true;
+        if (into) {
+          if (info.kind === "doc") updateData((cur) => moveDocInto(cur, info.id, into));
+          else updateData((cur) => nestFolder(cur, info.id, into));
+          notify(info.kind === "doc" ? "已移入文件夹" : "已移动为子文件夹");
+        } else if (index != null) {
+          updateData((cur) => reorderScope(cur, folderIdRef.current, info.kind, info.id, index));
+        }
+      }
+    };
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const removeDoc = (id: string) => { updateData((current) => ({ ...current, documents: current.documents.filter((d) => d.id !== id) })); notify("已删除笔记"); };
   const removeFolder = (id: string, keepContent: boolean) => { updateData((current) => deleteFolder(current, id, keepContent)); notify(keepContent ? "已删除文件夹，内容移回未分类" : "已删除文件夹及其内容"); };
@@ -227,25 +309,32 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
     } catch { notify("导入失败，请检查文件格式"); }
   };
 
-  const handleDrop = (event: React.DragEvent) => {
-    event.preventDefault();
-    if (!drag) return;
-    if (dropInto) {
-      if (drag.kind === "doc") updateData((current) => moveDocInto(current, drag.id, dropInto));
-      else updateData((current) => nestFolder(current, drag.id, dropInto));
-      notify(drag.kind === "doc" ? "已移入文件夹" : "已移动为子文件夹");
-    } else if (dropIndex != null) {
-      updateData((current) => reorderScope(current, currentFolderId, drag.kind, drag.id, dropIndex));
-    }
-    setDrag(null); setDropInto(null); setDropIndex(null);
+  const startDrag = (event: React.PointerEvent, kind: "folder" | "doc", id: string) => {
+    if ((event.target as Element).closest(".doc-card-actions, .icon-button")) return;
+    suppressClickRef.current = false;
+    dragRef.current = { kind, id };
+    dragStartRef.current = { x: event.clientX, y: event.clientY };
+    didDragRef.current = false;
+  };
+  const openDoc = (id: string) => {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+    setViewingDocId(id);
+  };
+  const enterFolder = (id: string) => {
+    if (suppressClickRef.current) { suppressClickRef.current = false; return; }
+    setCurrentFolderId(id);
   };
 
   const docActions = (
-    <div className="page-action-group">
-      <button className="button button-soft" onClick={() => setFolderModal({})}><FolderPlus size={16} /> 新建文件夹</button>
-      <label className="button button-soft" title="从 JSON / Markdown / TXT 文件导入笔记"><Upload size={16} /> 导入<input type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain" style={{ display: "none" }} onChange={(event) => { void importDocs(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
-      <div className="export-menu" ref={exportMenuRef}><button className="button button-soft" onClick={() => setExportOpen((v) => !v)}><Download size={16} /> 导出</button>{exportOpen && <div className="export-menu-pop"><button type="button" onClick={() => { exportDocs("json"); setExportOpen(false); }}>JSON<small>无损备份</small></button><button type="button" onClick={() => { exportDocs("md"); setExportOpen(false); }}>Markdown<small>便于阅读</small></button><button type="button" onClick={() => { exportDocs("txt"); setExportOpen(false); }}>TXT<small>纯文本</small></button></div>}</div>
-      <button className="button button-primary" onClick={() => setNewNote(true)}><Plus size={17} /> 新建笔记</button>
+    <div className="page-action-stack">
+      <div className="page-action-group">
+        <label className="button button-soft" title="从 JSON / Markdown / TXT 文件导入笔记"><Upload size={16} /> 导入<input type="file" accept=".json,.md,.txt,application/json,text/markdown,text/plain" style={{ display: "none" }} onChange={(event) => { void importDocs(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
+        <div className="export-menu" ref={exportMenuRef}><button className="button button-soft" onClick={() => setExportOpen((v) => !v)}><Download size={16} /> 导出</button>{exportOpen && <div className="export-menu-pop"><button type="button" onClick={() => { exportDocs("json"); setExportOpen(false); }}>JSON<small>无损备份</small></button><button type="button" onClick={() => { exportDocs("md"); setExportOpen(false); }}>Markdown<small>便于阅读</small></button><button type="button" onClick={() => { exportDocs("txt"); setExportOpen(false); }}>TXT<small>纯文本</small></button></div>}</div>
+      </div>
+      <div className="page-action-group">
+        <button className="button button-soft" onClick={() => setFolderModal({})}><FolderPlus size={16} /> 新建文件夹</button>
+        <button className="button button-primary" onClick={() => setNewNote(true)}><Plus size={17} /> 新建笔记</button>
+      </div>
     </div>
   );
 
@@ -256,28 +345,17 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
   const items = scopeItems(data, currentFolderId);
   const allNotes = [...data.documents].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || (a.order ?? 0) - (b.order ?? 0));
 
-  const onCardDragOver = (event: React.DragEvent, item: ScopeItem, index: number) => {
-    event.preventDefault();
-    if (!drag) return;
-    const selfId = item.kind === "folder" ? item.folder.id : item.doc.id;
-    if (drag.kind === "doc" && item.kind === "doc" && drag.id === selfId) { setDropInto(null); setDropIndex(null); return; }
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const ratio = (event.clientY - rect.top) / rect.height;
-    if (item.kind === "folder" && drag.id !== item.folder.id && ratio >= 0.3 && ratio <= 0.7 && !(drag.kind === "folder" && isDescendant(data, drag.id, item.folder.id))) {
-      setDropInto(item.folder.id); setDropIndex(null);
-    } else {
-      setDropInto(null); setDropIndex(index + (ratio > 0.5 ? 1 : 0));
-    }
+  const dropHint = (index: number) => {
+    if (dropInto || dropIndex == null) return "";
+    if (dropIndex === index) return " is-drop-before";
+    if (dropIndex === items.length && index === items.length - 1) return " is-drop-after";
+    return "";
   };
 
   return (
     <div className="page-stack page-enter">
-      <PageIntro eyebrow="NOTES" title="便签笔记" copy="用文件夹把不同类型的笔记整理成合集，拖拽卡片即可排序或归类。" actions={docActions} />
+      <PageIntro eyebrow="NOTES" title="便签笔记" copy="拖拽卡片右侧手柄即可排序或归类：拖到文件夹上移入，拖到卡片边缘排序。" actions={docActions} />
       <div className="notes-toolbar">
-        <div className="segmented" role="tablist">
-          <button type="button" className={mode === "folders" ? "active" : ""} onClick={() => setMode("folders")}>文件夹</button>
-          <button type="button" className={mode === "all" ? "active" : ""} onClick={() => setMode("all")}>全部笔记</button>
-        </div>
         {mode === "folders" && (
           <nav className="note-breadcrumb" aria-label="文件夹路径">
             <button type="button" className={currentFolderId == null ? "is-current" : ""} onClick={() => setCurrentFolderId(null)}>全部</button>
@@ -286,41 +364,68 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
             ))}
           </nav>
         )}
+        <div className="segmented" role="tablist">
+          <button type="button" className={mode === "folders" ? "active" : ""} onClick={() => setMode("folders")}>笔记</button>
+          <button type="button" className={mode === "all" ? "active" : ""} onClick={() => setMode("all")}>展开</button>
+        </div>
       </div>
       {mode === "folders" ? (
-        <div className="doc-list" onDragOver={(event) => { if (event.target === event.currentTarget) { event.preventDefault(); setDropInto(null); setDropIndex(items.length); } }} onDrop={handleDrop}>
-          {items.map((item, index) => item.kind === "folder" ? (
-            <article className={`doc-card folder-card panel${drag?.kind === "folder" && drag.id === item.folder.id ? " is-dragging" : ""}${dropInto === item.folder.id ? " is-drop-into" : ""}${dropIndex === index && !dropInto ? " is-drop-target" : ""}`} key={item.folder.id}
-              onDragOver={(event) => onCardDragOver(event, item, index)}
-              onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) { if (dropInto === item.folder.id) setDropInto(null); if (dropIndex != null) setDropIndex(null); } }}>
-              <button type="button" className="doc-card-main folder-card-main" onClick={() => setCurrentFolderId(item.folder.id)}>
-                <span className={`folder-emoji tone-${item.folder.color}`}>{item.folder.emoji}</span>
-                <h3>{item.folder.name || "未命名文件夹"}</h3>
-                <p>{folderStats(data, item.folder.id).subFolders} 个子文件夹 · {folderStats(data, item.folder.id).notes} 篇笔记</p>
-              </button>
-              <div className="doc-card-foot">
-                <small><Folder size={12} /> 文件夹</small>
-                <div className="doc-card-actions">
-                  <span className="doc-drag-handle" draggable title="拖拽排序或归类" onDragStart={(event) => { setDrag({ kind: "folder", id: item.folder.id }); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.folder.id); }} onDragEnd={() => { setDrag(null); setDropInto(null); setDropIndex(null); }}><GripVertical size={15} /></span>
-                  <IconButton label="重命名文件夹" onClick={() => setFolderModal({ folderId: item.folder.id })}><Pencil size={15} /></IconButton>
-                  <IconButton label="删除文件夹" onClick={() => setConfirmDeleteFolderId(item.folder.id)}><Trash2 size={15} /></IconButton>
+        <div className="doc-list is-draggable">
+          {items.map((item, index) => {
+            const isDraggingThis = drag?.kind === item.kind && drag.id === (item.kind === "folder" ? item.folder.id : item.doc.id);
+            if (item.kind === "folder") {
+              return (
+                <article
+                  className={`doc-card folder-card panel${isDraggingThis ? " is-dragging" : ""}${dropInto === item.folder.id ? " is-drop-into" : ""}${dropHint(index)}`}
+                  key={item.folder.id}
+                  onPointerDown={(event) => startDrag(event, "folder", item.folder.id)}
+                >
+                  <button type="button" className="doc-card-main folder-card-main" onClick={() => enterFolder(item.folder.id)}>
+                    <h3>{item.folder.name || "未命名文件夹"}</h3>
+                    <div className="folder-meta">
+                      <span>{folderStats(data, item.folder.id).subFolders} 个子文件夹 · {folderStats(data, item.folder.id).notes} 篇笔记</span>
+                      <span className={`folder-emoji tone-${item.folder.color}`}>{item.folder.emoji}</span>
+                    </div>
+                  </button>
+                  <div className="doc-card-foot">
+                    <small><Folder size={12} /> 文件夹</small>
+                    <div className="doc-card-actions">
+                      <IconButton label="重命名文件夹" onClick={() => setFolderModal({ folderId: item.folder.id })}><Pencil size={15} /></IconButton>
+                      <IconButton label="删除文件夹" onClick={() => setConfirmDeleteFolderId(item.folder.id)}><Trash2 size={15} /></IconButton>
+                    </div>
+                  </div>
+                  {drag && !isDraggingThis && (
+                    <>
+                      <div className="drop-zone drop-zone-before" data-zone="before" data-card-kind="folder" data-card-id={item.folder.id} data-card-index={index} />
+                      <div className="drop-zone drop-zone-into" data-zone="into" data-card-kind="folder" data-card-id={item.folder.id} data-card-index={index} />
+                      <div className="drop-zone drop-zone-after" data-zone="after" data-card-kind="folder" data-card-id={item.folder.id} data-card-index={index} />
+                    </>
+                  )}
+                </article>
+              );
+            }
+            return (
+              <article
+                className={`doc-card panel${isDraggingThis ? " is-dragging" : ""}${dropHint(index)}`}
+                key={item.doc.id}
+                onPointerDown={(event) => startDrag(event, "doc", item.doc.id)}
+              >
+                <button type="button" className="doc-card-main" onClick={() => openDoc(item.doc.id)}><h3>{item.doc.title || "无标题"}</h3><p>{item.doc.preview || item.doc.content}</p></button>
+                <div className="doc-card-foot">
+                  <small>{item.doc.format.toUpperCase()} · {item.doc.createdAt}</small>
+                  <div className="doc-card-actions">
+                    <IconButton label="删除笔记" onClick={() => setConfirmDeleteId(item.doc.id)}><Trash2 size={15} /></IconButton>
+                  </div>
                 </div>
-              </div>
-            </article>
-          ) : (
-            <article className={`doc-card panel${drag?.kind === "doc" && drag.id === item.doc.id ? " is-dragging" : ""}${dropIndex === index && !dropInto ? " is-drop-target" : ""}`} key={item.doc.id}
-              onDragOver={(event) => onCardDragOver(event, item, index)}
-              onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node) && dropIndex != null) setDropIndex(null); }}>
-              <button type="button" className="doc-card-main" onClick={() => setViewingDocId(item.doc.id)}><h3>{item.doc.title || "无标题"}</h3><p>{item.doc.preview || item.doc.content}</p></button>
-              <div className="doc-card-foot">
-                <small>{item.doc.format.toUpperCase()} · {item.doc.createdAt}</small>
-                <div className="doc-card-actions">
-                  <span className="doc-drag-handle" draggable title="拖拽排序或拖到文件夹上归类" onDragStart={(event) => { setDrag({ kind: "doc", id: item.doc.id }); event.dataTransfer.effectAllowed = "move"; event.dataTransfer.setData("text/plain", item.doc.id); }} onDragEnd={() => { setDrag(null); setDropInto(null); setDropIndex(null); }}><GripVertical size={15} /></span>
-                  <IconButton label="删除笔记" onClick={() => setConfirmDeleteId(item.doc.id)}><Trash2 size={15} /></IconButton>
-                </div>
-              </div>
-            </article>
-          ))}
+                {drag && !isDraggingThis && (
+                  <>
+                    <div className="drop-zone drop-zone-before" data-zone="before" data-card-kind="doc" data-card-id={item.doc.id} data-card-index={index} />
+                    <div className="drop-zone drop-zone-after" data-zone="after" data-card-kind="doc" data-card-id={item.doc.id} data-card-index={index} />
+                  </>
+                )}
+              </article>
+            );
+          })}
         </div>
       ) : (
         <div className="doc-list">

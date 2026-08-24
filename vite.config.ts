@@ -73,6 +73,12 @@ export default defineConfig({
       "react/jsx-dev-runtime",
     ],
   },
+  server: {
+    watch: {
+      // 忽略 Rust 编译产物与数据目录，避免 Windows 下 EBUSY 冲突
+      ignored: ["**/src-tauri/**", "**/target/**", "**/data/**"],
+    },
+  },
   build: {
     cssTarget: "esnext",
   },

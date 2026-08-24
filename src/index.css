@@ -1057,7 +1057,7 @@ textarea:focus-visible {
 .export-menu-pop button:hover { background: var(--lilac-soft); }
 .export-menu-pop small { color: var(--ink-soft); font-size: 12px; }
 .doc-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
-.doc-card { display: flex; flex-direction: column; overflow: hidden; }
+.doc-card { position: relative; display: flex; flex-direction: column; overflow: visible; }
 .doc-card-main { display: flex; flex: 1; min-height: 110px; flex-direction: column; gap: 8px; padding: 16px 18px 12px; border: 0; background: transparent; cursor: pointer; text-align: left; }
 .doc-card-main h3 { margin: 0; font-size: 14px; font-weight: 700; color: var(--ink); word-break: break-word; }
 .doc-card-main p { margin: 0; color: var(--ink-soft); font-size: 13px; line-height: 1.65; white-space: pre-wrap; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
@@ -1069,7 +1069,28 @@ textarea:focus-visible {
 .doc-drag-handle:hover { background: var(--lilac-soft); color: var(--purple); }
 .doc-drag-handle:active { cursor: grabbing; }
 .doc-card.is-dragging { opacity: .45; }
-.doc-card.is-drop-target { box-shadow: inset 0 0 0 2px var(--purple); }
+.doc-list.is-draggable .doc-card { cursor: grab; }
+.doc-list.is-draggable .doc-card:active { cursor: grabbing; }
+.doc-list.is-draggable .doc-card-main { cursor: grab; }
+.doc-card.is-drop-before::before,
+.doc-card.is-drop-after::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 3px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(to bottom, var(--purple) 0 6px, transparent 6px 12px);
+  z-index: 8;
+}
+.doc-card.is-drop-before::before { left: -8px; }
+.doc-card.is-drop-after::after { right: -8px; }
+.drop-zone { position: absolute; top: 0; bottom: 0; z-index: 5; }
+.folder-card .drop-zone-before { left: 0; width: 33%; }
+.folder-card .drop-zone-into { left: 33%; width: 34%; }
+.folder-card .drop-zone-after { right: 0; width: 33%; }
+.doc-card:not(.folder-card) .drop-zone-before { left: 0; width: 50%; }
+.doc-card:not(.folder-card) .drop-zone-after { right: 0; width: 50%; }
 .doc-page-body { padding: 24px; }
 .diary-page-body { padding: 24px; min-height: 200px; }
 .doc-page-footer { display: flex; justify-content: flex-end; margin-top: 16px; }
@@ -1115,7 +1136,10 @@ textarea:focus-visible {
 
 /* Notes folders */
 
-.notes-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.notes-toolbar { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.notes-toolbar .segmented { margin-left: auto; }
+.page-action-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.page-action-stack > .page-action-group:first-child { position: relative; top: -10px; }
 
 .note-breadcrumb { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; color: var(--ink-soft); }
 .note-breadcrumb button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-soft); cursor: pointer; font-size: 13px; }
@@ -1123,10 +1147,12 @@ textarea:focus-visible {
 .note-breadcrumb button.is-current { background: var(--lilac-soft); color: var(--purple-deep); font-weight: 650; }
 .note-breadcrumb svg { color: var(--purple-mid); }
 
-.folder-card-main { gap: 8px; }
-.folder-emoji { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 14px; font-size: 22px; }
-.folder-card-main h3 { margin-top: 4px; }
-.folder-card.is-drop-into { box-shadow: inset 0 0 0 3px var(--purple); background: var(--lilac-soft); }
+.folder-card-main { justify-content: space-between; gap: 10px; padding-bottom: 8px; }
+.folder-emoji { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 7px; font-size: 13px; flex: 0 0 auto; }
+.folder-card-main h3 { margin: 2px 0 0; font-size: 16px; }
+.folder-meta { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.folder-meta > span:first-child { color: var(--ink-soft); font-size: 12px; }
+.folder-card.is-drop-into { box-shadow: inset 0 0 0 4px var(--purple); background: var(--lilac-soft); }
 .folder-card .doc-card-foot small { display: inline-flex; align-items: center; gap: 4px; }
 
 .folder-delete-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 24px; }
