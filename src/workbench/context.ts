@@ -20,6 +20,7 @@ export type WorkbenchContextValue = {
   notify: (message: string) => void;
   holidays: HolidayMap;
   loadHolidays: (year: number) => void;
+  openOnboarding: () => void;
 };
 
 export const WorkbenchContext = createContext<WorkbenchContextValue | null>(null);

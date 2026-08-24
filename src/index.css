@@ -1138,6 +1138,19 @@ textarea:focus-visible {
 .page-action-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .page-action-stack > .page-action-group:first-child { position: relative; top: -10px; }
 
+/* Onboarding */
+
+.onboarding-root { position: fixed; inset: 0; z-index: 300; }
+.onboarding-hole { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(45, 34, 55, 0.55); pointer-events: none; transition: top 0.25s ease, left 0.25s ease, width 0.25s ease, height 0.25s ease; }
+.onboarding-bubble { position: fixed; z-index: 1; width: min(440px, calc(100vw - 32px)); padding: 26px 28px; border-radius: 20px; background: #fff; color: var(--ink); box-shadow: 0 24px 60px rgba(45, 34, 55, 0.32); }
+.onboarding-progress { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; color: var(--ink-soft); font-size: 13px; font-weight: 650; }
+.onboarding-bubble h3 { margin: 0 0 10px; font-size: 22px; letter-spacing: -0.01em; }
+.onboarding-bubble p { margin: 0 0 20px; color: var(--ink-soft); font-size: 15px; line-height: 1.7; }
+.onboarding-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.onboarding-nav { display: flex; gap: 8px; }
+.onboarding-actions .button { height: 40px; padding: 0 16px; font-size: 13px; }
+.settings-guide-row { display: flex; justify-content: flex-start; margin-top: 18px; }
+
 .note-breadcrumb { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; color: var(--ink-soft); }
 .note-breadcrumb button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-soft); cursor: pointer; font-size: 13px; }
 .note-breadcrumb button:hover { background: var(--lilac-soft); color: var(--purple-deep); }

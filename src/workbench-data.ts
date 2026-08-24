@@ -138,6 +138,7 @@ export type WorkbenchData = {
     reminderAdvanceMinutes: number;
     theme: "light" | "dark";
     autoLaunch: boolean;
+    onboardingDone: boolean;
   };
   tasks: WorkbenchTask[];
   schedule: ScheduleItem[];
@@ -195,6 +196,7 @@ export function createDefaultWorkbenchData(): WorkbenchData {
       reminderAdvanceMinutes: 0,
       theme: "light",
       autoLaunch: true,
+      onboardingDone: false,
     },
     tasks: [
       { id: "task-1", title: "整理工作台页面架构", meta: "个人项目", date: today, time: "09:30", tag: "设计", tone: "purple", done: true, focusMinutes: 80 },

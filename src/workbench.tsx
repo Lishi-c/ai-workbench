@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createDefaultWorkbenchData, dateKey, normalizeWorkbenchData, type WorkbenchData } from "./workbench-data";
 import { bottomItems, navSections, type ModalState, type PageKey, type WorkbenchContextValue, WorkbenchContext } from "./workbench/context";
 import { CommandPalette, EditorModal, ReminderPanel } from "./workbench/overlays";
+import { Onboarding } from "./workbench/onboarding";
 import { DashboardPage, DiaryPage, EnglishPage, FinancePage, FocusPage, HealthPage, LibraryPage, NotesPage, RecipesPage, TasksPage } from "./workbench/pages";
 import { fetchHolidays, loadLocalData, saveLocalData } from "./workbench/storage";
 import type { HolidayMap } from "./workbench/calendar-festivals";
@@ -35,6 +36,7 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const [openBookId, setOpenBookId] = useState<string | null>(null);
   const [reminderOpen, setReminderOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const reminderRef = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<WorkbenchData>(() => createDefaultWorkbenchData());
   const [holidays, setHolidays] = useState<HolidayMap>({});
@@ -50,6 +52,7 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
       if (restored) setToast("检测到数据文件损坏，已自动从备份恢复");
       setHydrated(true);
       setSaveStatus("saved");
+      if (!saved?.settings?.onboardingDone) setOnboardingOpen(true);
     });
     return () => { active = false; };
   }, []);
@@ -97,7 +100,8 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
   const navigate = (key: PageKey) => { setActivePage(key); setDrawerOpen(false); window.history.replaceState(null, "", `#${key}`); window.scrollTo({ top: 0, behavior: "smooth" }); };
   const openNote = (id: string) => { setOpenNoteId(id); navigate("notes"); setPaletteOpen(false); };
   const openBook = (id: string) => { setOpenBookId(id); navigate("library"); setPaletteOpen(false); };
-  const context = useMemo<WorkbenchContextValue>(() => ({ data, updateData: setData, navigate, openModal: (kind, payload) => setModal({ kind, payload }), notify: setToast, holidays, loadHolidays }), [data, holidays, loadHolidays]);
+  const finishOnboarding = () => { setData((current) => ({ ...current, settings: { ...current.settings, onboardingDone: true } })); setOnboardingOpen(false); };
+  const context = useMemo<WorkbenchContextValue>(() => ({ data, updateData: setData, navigate, openModal: (kind, payload) => setModal({ kind, payload }), notify: setToast, holidays, loadHolidays, openOnboarding: () => setOnboardingOpen(true) }), [data, holidays, loadHolidays]);
   const isMoonblue = skinClassName.split(" ").includes("moonblue-glass");
   const activeItem = navItems.find((item) => item.key === activePage);
   const statusText = saveStatus === "loading" ? "正在读取数据…" : saveStatus === "saving" ? "正在保存…" : saveStatus === "saved" ? "所有更改已保存" : "暂时无法保存";
@@ -120,7 +124,7 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
         {isMoonblue && <div className="moonblue-workspace-label"><small>PERSONAL BOARD</small><strong>{data.settings.workspaceTitle}</strong><span>{data.settings.workspaceSubtitle}</span></div>}
         <nav className="side-nav" aria-label="主要导航">{navSections.map((section) => <div className="nav-section" key={section.label}>
           <span className="nav-label">{section.label}</span>
-          {section.items.map((item) => { const Icon = item.icon; return <button type="button" className={activePage === item.key ? "active" : ""} onClick={() => navigate(item.key)} key={item.key}><span className="nav-icon"><Icon size={18} /></span><span><strong>{item.label}</strong><small>{item.caption}</small></span><ChevronRight className="nav-chevron" size={15} /></button>; })}
+          {section.items.map((item) => { const Icon = item.icon; return <button type="button" data-nav-key={item.key} className={activePage === item.key ? "active" : ""} onClick={() => navigate(item.key)} key={item.key}><span className="nav-icon"><Icon size={18} /></span><span><strong>{item.label}</strong><small>{item.caption}</small></span><ChevronRight className="nav-chevron" size={15} /></button>; })}
         </div>)}</nav>
         {isMoonblue ? <footer className="moonblue-sidebar-footer">
           <span className="moonblue-avatar">{data.settings.displayName.slice(0, 1)}</span>
@@ -142,6 +146,7 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
         <main className="content-area" key={activePage}>{renderPage(activePage, { noteId: openNoteId, bookId: openBookId, onNoteHandled: () => setOpenNoteId(null), onBookHandled: () => setOpenBookId(null) })}</main>
       </div>
       <nav className="bottom-nav" aria-label="移动端导航">{bottomItems.map((item) => { const Icon = item.icon; return <button type="button" className={activePage === item.key ? "active" : ""} key={item.key} onClick={() => navigate(item.key)}><Icon size={19} /><span>{item.label}</span></button>; })}<button type="button" onClick={() => setDrawerOpen(true)}><Menu size={19} /><span>更多</span></button></nav>
+      {onboardingOpen && <Onboarding onFinish={finishOnboarding} />}
       {modal && <EditorModal modal={modal} close={() => setModal(null)} />}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} navItems={navItems} data={data} navigate={navigate} openNote={openNote} openBook={openBook} />
       {toast && <div className="app-toast" role="status"><CheckCircle2 size={17} />{toast}</div>}
