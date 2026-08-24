@@ -1065,9 +1065,6 @@ textarea:focus-visible {
 .doc-card-foot small { color: var(--ink-soft); font-size: 12px; }
 .doc-card-foot .icon-button { width: 28px; height: 28px; }
 .doc-card-actions { display: flex; align-items: center; gap: 4px; }
-.doc-drag-handle { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 10px; color: var(--ink-soft); cursor: grab; transition: background 160ms ease, color 160ms ease; }
-.doc-drag-handle:hover { background: var(--lilac-soft); color: var(--purple); }
-.doc-drag-handle:active { cursor: grabbing; }
 .doc-card.is-dragging { opacity: .45; }
 .doc-list.is-draggable .doc-card { cursor: grab; }
 .doc-list.is-draggable .doc-card:active { cursor: grabbing; }
