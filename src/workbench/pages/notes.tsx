@@ -5,6 +5,7 @@ import { useWorkbench } from "../context";
 import { renderMarkdown, MdToolbar } from "./md";
 import { fetchContentText, readTextFile } from "../storage";
 import { ConfirmDialog, IconButton, PageIntro } from "../ui";
+import { setEscBack, setEscPopup } from "../esc";
 
 const ROOT_DROP = "__root__";
 
@@ -480,6 +481,7 @@ function FolderDeleteDialog({ folderId, onCancel, onConfirm }: { folderId: strin
   const { data } = useWorkbench();
   const stats = folderStats(data, folderId);
   useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = ""; }; }, []);
+  useEffect(() => { setEscPopup(onCancel); return () => setEscPopup(null); }, [onCancel]);
   return (
     <div className="modal-backdrop confirm-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}>
       <section className="editor-modal confirm-modal" role="alertdialog" aria-modal="true">
@@ -542,6 +544,8 @@ export function DocPage({ docId, isNew, onBack }: { docId?: string; isNew?: bool
   const [folderId, setFolderId] = useState<string | null>(doc?.folderId ?? null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const onBackRef = useRef(onBack); onBackRef.current = onBack;
+  useEffect(() => { setEscBack(() => onBackRef.current()); return () => setEscBack(null); }, []);
 
   useEffect(() => {
     let active = true;

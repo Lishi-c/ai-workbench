@@ -8,6 +8,7 @@ import { DashboardPage, DiaryPage, EnglishPage, FinancePage, FocusPage, HealthPa
 import { fetchHolidays, loadLocalData, saveLocalData } from "./workbench/storage";
 import type { HolidayMap } from "./workbench/calendar-festivals";
 import { IconButton, WorkspaceTitle } from "./workbench/ui";
+import { getEscBack, getEscPopup } from "./workbench/esc";
 
 function renderPage(page: PageKey, deep: { noteId: string | null; bookId: string | null; onNoteHandled: () => void; onBookHandled: () => void }) {
   if (page === "dashboard") return <DashboardPage />;
@@ -38,6 +39,8 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
   const [reminderOpen, setReminderOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const reminderRef = useRef<HTMLDivElement>(null);
+  const modalRef = useRef(modal); modalRef.current = modal;
+  const paletteOpenRef = useRef(paletteOpen); paletteOpenRef.current = paletteOpen;
   const [data, setData] = useState<WorkbenchData>(() => createDefaultWorkbenchData());
   const [holidays, setHolidays] = useState<HolidayMap>({});
   const [hydrated, setHydrated] = useState(false);
@@ -83,7 +86,19 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
   useEffect(() => { if (!toast) return; const timer = window.setTimeout(() => setToast(""), 2600); return () => window.clearTimeout(timer); }, [toast]);
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen((value) => !value); }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); setPaletteOpen((value) => !value); return; }
+      if (event.key !== "Escape") return;
+      // 优先级：命令面板 > 弹窗 > 本地确认弹窗 > 返回
+      if (paletteOpenRef.current) { setPaletteOpen(false); return; }
+      if (modalRef.current) { setModal(null); return; }
+      const popup = getEscPopup();
+      if (popup) { popup(); return; }
+      const back = getEscBack();
+      if (!back) return;
+      // 输入框/文本域内不触发返回，避免打字误触
+      const el = event.target as HTMLElement | null;
+      if (el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) return;
+      back();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);

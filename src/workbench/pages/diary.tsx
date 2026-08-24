@@ -5,6 +5,7 @@ import { moods, useWorkbench } from "../context";
 import { renderMarkdown, MdToolbar } from "./md";
 import { getDateLabel } from "../calendar-festivals";
 import { ConfirmDialog, FormField, IconButton, PageIntro, SectionTitle } from "../ui";
+import { setEscBack } from "../esc";
 
 function buildCalendar(cursor: Date) {
   const year = cursor.getFullYear(); const month = cursor.getMonth();
@@ -79,6 +80,8 @@ export function DiaryEntryPage({ entryId, newDate, onBack }: { entryId?: string;
   const [tags, setTags] = useState((entry?.tags ?? []).join("，"));
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const onBackRef = useRef(onBack); onBackRef.current = onBack;
+  useEffect(() => { setEscBack(() => onBackRef.current()); return () => setEscBack(null); }, []);
 
   useEffect(() => {
     setDate(entry?.date ?? newDate ?? ""); setTime(entry?.time ?? new Date().toTimeString().slice(0, 5)); setTitle(entry?.title ?? ""); setContent(entry?.content ?? ""); setMood(entry?.mood ?? (newDate ? data.moodLogs[newDate] ?? "good" : "good")); setTags((entry?.tags ?? []).join("，")); setEditing(!entry?.content);
