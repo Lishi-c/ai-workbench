@@ -6,6 +6,8 @@ import { renderMarkdown, MdToolbar } from "./md";
 import { fetchContentText, readTextFile } from "../storage";
 import { ConfirmDialog, IconButton, PageIntro } from "../ui";
 
+const ROOT_DROP = "__root__";
+
 type ScopeItem = { kind: "folder"; folder: NoteFolder; order: number } | { kind: "doc"; doc: Document; order: number };
 
 function scopeItems(data: WorkbenchData, folderId: string | null): ScopeItem[] {
@@ -127,6 +129,27 @@ function nestFolder(current: WorkbenchData, folderId: string, parentId: string |
 }
 
 function deleteFolder(current: WorkbenchData, folderId: string, keepContent: boolean): WorkbenchData {
+  if (keepContent) {
+    // 仅删除该文件夹本身：直接的笔记移回未分类，直接的子文件夹升级为顶级（其内部笔记跟着走）
+    const rootNoteMax = current.documents.filter((d) => (d.folderId ?? null) === null).reduce((m, d) => Math.max(m, d.order ?? 0), -1);
+    let noteCursor = rootNoteMax;
+    const documents = current.documents.map((d) => {
+      if (d.folderId === folderId) { noteCursor += 1; return { ...d, folderId: null, order: noteCursor }; }
+      return d;
+    });
+    const directSubs = current.noteFolders.filter((f) => f.parentId === folderId).sort((a, b) => a.order - b.order);
+    const promotedIds = new Set(directSubs.map((f) => f.id));
+    const rootFolderMax = current.noteFolders.filter((f) => (f.parentId ?? null) === null && f.id !== folderId).reduce((m, f) => Math.max(m, f.order), -1);
+    let folderCursor = rootFolderMax;
+    const noteFolders = current.noteFolders
+      .filter((f) => f.id !== folderId)
+      .map((f) => {
+        if (promotedIds.has(f.id)) { folderCursor += 1; return { ...f, parentId: null, order: folderCursor }; }
+        return f;
+      });
+    return { ...current, noteFolders, documents };
+  }
+  // 连同内容删除：删除整个子树及其下所有笔记
   const toRemove = new Set<string>();
   const stack = [folderId];
   while (stack.length) {
@@ -135,19 +158,8 @@ function deleteFolder(current: WorkbenchData, folderId: string, keepContent: boo
     toRemove.add(id);
     current.noteFolders.filter((f) => f.parentId === id).forEach((f) => stack.push(f.id));
   }
-  let noteFolders = current.noteFolders.filter((f) => !toRemove.has(f.id));
-  let documents = current.documents;
-  if (keepContent) {
-    const nullMax = documents.filter((d) => (d.folderId ?? null) === null).reduce((m, d) => Math.max(m, d.order ?? 0), -1);
-    let cursor = nullMax;
-    documents = documents.map((d) => {
-      if (toRemove.has(d.folderId ?? "")) { cursor += 1; return { ...d, folderId: null, order: cursor }; }
-      return d;
-    });
-    noteFolders = noteFolders.map((f) => (f.parentId && toRemove.has(f.parentId) ? { ...f, parentId: null } : f));
-  } else {
-    documents = documents.filter((d) => !toRemove.has(d.folderId ?? ""));
-  }
+  const noteFolders = current.noteFolders.filter((f) => !toRemove.has(f.id));
+  const documents = current.documents.filter((d) => !toRemove.has(d.folderId ?? ""));
   return { ...current, noteFolders, documents };
 }
 
@@ -219,7 +231,15 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
       if (!info) return;
       const el = event.target as Element | null;
       const zone = el ? (el.closest(".drop-zone") as HTMLElement | null) : null;
-      if (!zone) { applyDrop(null, null); return; }
+      if (!zone) {
+        const crumb = el ? (el.closest(".crumb-drop-target") as HTMLElement | null) : null;
+        if (crumb) {
+          const target = crumb.getAttribute("data-target-folder");
+          if (target != null) { applyDrop(target, null); return; }
+        }
+        applyDrop(null, null);
+        return;
+      }
       const zoneType = zone.getAttribute("data-zone");
       const cardKind = zone.getAttribute("data-card-kind");
       const cardId = zone.getAttribute("data-card-id");
@@ -252,9 +272,10 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
       if (didDrag && info) {
         suppressClickRef.current = true;
         if (into) {
-          if (info.kind === "doc") updateData((cur) => moveDocInto(cur, info.id, into));
-          else updateData((cur) => nestFolder(cur, info.id, into));
-          notify(info.kind === "doc" ? "已移入文件夹" : "已移动为子文件夹");
+          const target = into === ROOT_DROP ? null : into;
+          if (info.kind === "doc") updateData((cur) => moveDocInto(cur, info.id, target));
+          else updateData((cur) => nestFolder(cur, info.id, target));
+          notify(info.kind === "doc" ? (target == null ? "已移回未分类" : "已移入文件夹") : (target == null ? "已移回未分类" : "已移动为子文件夹"));
         } else if (index != null) {
           updateData((cur) => reorderScope(cur, folderIdRef.current, info.kind, info.id, index));
         }
@@ -358,10 +379,16 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
       <div className="notes-toolbar">
         {mode === "folders" && (
           <nav className="note-breadcrumb" aria-label="文件夹路径">
-            <button type="button" className={currentFolderId == null ? "is-current" : ""} onClick={() => setCurrentFolderId(null)}>全部</button>
-            {path.map((f) => (
-              <Fragment key={f.id}><ChevronRight size={14} /><button type="button" className={currentFolderId === f.id ? "is-current" : ""} onClick={() => setCurrentFolderId(f.id)}>{f.emoji} {f.name}</button></Fragment>
-            ))}
+            <button type="button" className={`${currentFolderId == null ? "is-current" : ""}${currentFolderId != null ? " crumb-drop-target" : ""}${dropInto === ROOT_DROP ? " is-drop-target" : ""}`} data-target-folder={ROOT_DROP} title={currentFolderId != null ? "拖拽到这里，移回未分类" : "全部笔记"} onClick={() => { if (suppressClickRef.current) { suppressClickRef.current = false; return; } setCurrentFolderId(null); }}>全部</button>
+            {path.map((f) => {
+              const isCurrent = currentFolderId === f.id;
+              return (
+                <Fragment key={f.id}>
+                  <ChevronRight size={14} />
+                  <button type="button" className={`${isCurrent ? "is-current" : ""}${!isCurrent ? " crumb-drop-target" : ""}${dropInto === f.id ? " is-drop-target" : ""}`} data-target-folder={f.id} title={!isCurrent ? `拖拽到这里，移入「${f.name}」` : undefined} onClick={() => { if (suppressClickRef.current) { suppressClickRef.current = false; return; } setCurrentFolderId(f.id); }}>{f.emoji} {f.name}</button>
+                </Fragment>
+              );
+            })}
           </nav>
         )}
         <div className="segmented" role="tablist">
@@ -459,7 +486,7 @@ function FolderDeleteDialog({ folderId, onCancel, onConfirm }: { folderId: strin
         <IconButton label="关闭" className="modal-close" onClick={onCancel}><X size={18} /></IconButton>
         <header className="modal-head"><span className="section-eyebrow">DELETE FOLDER</span><h2>删除这个文件夹？</h2><p>里面包含 {stats.subFolders} 个子文件夹、{stats.notes} 篇笔记。请选择如何处理这些内容。</p></header>
         <div className="folder-delete-actions">
-          <button type="button" className="button button-soft" onClick={() => onConfirm(true)}>仅删文件夹<small>内容移回未分类</small></button>
+          <button type="button" className="button button-soft" onClick={() => onConfirm(true)}>仅删文件夹<small>内容移回未分类，子文件夹保留为顶级</small></button>
           <button type="button" className="button danger-button" onClick={() => onConfirm(false)}><Trash2 size={15} /> 连同内容删除</button>
         </div>
       </section>

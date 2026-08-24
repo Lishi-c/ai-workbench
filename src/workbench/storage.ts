@@ -104,3 +104,23 @@ export async function fetchHolidays(year: number): Promise<HolidayMap> {
   } catch { /* 忽略，降级为无调休 */ }
   return {};
 }
+
+export const isTauriRuntime = isTauri;
+
+// 备份到用户指定位置：Tauri 下弹「另存为」对话框，返回保存路径；取消返回 null
+export async function saveBackupFile(json: string, fileName: string): Promise<string | null> {
+  if (!isTauri) return null;
+  try {
+    return await invoke<string | null>("save_backup", { json, fileName });
+  } catch {
+    return null;
+  }
+}
+
+// 打开文件所在目录并选中该文件（Windows 用 explorer /select）
+export async function revealInFolder(path: string): Promise<void> {
+  if (!isTauri) return;
+  try {
+    await invoke("reveal_in_folder", { path });
+  } catch { /* ignore */ }
+}

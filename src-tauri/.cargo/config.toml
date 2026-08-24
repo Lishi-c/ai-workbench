@@ -10,3 +10,8 @@ index = "sparse+https://rsproxy.cn/index/"
 
 [net]
 git-fetch-with-cli = true
+
+# 系统代理（Clash 等）可能指向 127.0.0.1:7890 但进程未运行，导致拉取依赖失败；
+# rsproxy.cn 是国内镜像，应直连，这里显式禁用代理。
+[http]
+proxy = ""

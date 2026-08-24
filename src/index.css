@@ -1155,6 +1155,7 @@ textarea:focus-visible {
 .note-breadcrumb button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-soft); cursor: pointer; font-size: 13px; }
 .note-breadcrumb button:hover { background: var(--lilac-soft); color: var(--purple-deep); }
 .note-breadcrumb button.is-current { background: var(--lilac-soft); color: var(--purple-deep); font-weight: 650; }
+.note-breadcrumb button.is-drop-target { box-shadow: inset 0 0 0 2px var(--purple); background: var(--lilac-soft); color: var(--purple-deep); font-weight: 650; }
 .note-breadcrumb svg { color: var(--purple-mid); }
 
 .folder-card-main { justify-content: space-between; gap: 10px; padding-bottom: 8px; }
@@ -1326,6 +1327,9 @@ textarea:focus-visible {
 .check-field { display: flex; min-height: 45px; align-items: center; gap: 9px; align-self: end; padding: 0 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--lilac-soft); color: var(--purple); cursor: pointer; font-size: 12px; }
 .check-field input { accent-color: var(--purple); }
 .modal-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 24px; }
+.backup-result { margin-top: 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--lilac-soft); }
+.backup-result p { margin: 0 0 4px; color: var(--ink-soft); font-size: 13px; }
+.backup-result code { display: block; color: var(--ink); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; word-break: break-all; }
 .modal-single-action { margin-top: 22px; }
 .danger-button { background: #ad6d7c; color: white; }
 .modal-divider { display: flex; align-items: center; gap: 12px; margin: 22px 0 16px; color: var(--ink-soft); font-size: 12px; }

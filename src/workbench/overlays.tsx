@@ -1,27 +1,35 @@
 import {
   BookOpen, CalendarCheck2, Check, CheckSquare2, ChevronRight, Clock3,
-  Download, FileUp, HeartPulse, Pause, PenLine, Play, RotateCcw, Search,
+  Download, FileUp, FolderOpen, HeartPulse, Pause, PenLine, Play, RotateCcw, Search,
   TimerReset, Trash2, Upload, WalletCards, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createId, dateKey, normalizeWorkbenchData, type CustomRecipe, type Tone, type WorkbenchData, type WorkbenchTask } from "../workbench-data";
 import { field, formatMoney, type NavItem, type PageKey, recipeCards, type ModalState, useWorkbench } from "./context";
-import { fetchContentText, readTextFile } from "./storage";
+import { fetchContentText, isTauriRuntime, readTextFile, revealInFolder, saveBackupFile } from "./storage";
 import { FormField, FormSelect, IconButton, ModalActions, ModalHead } from "./ui";
 
 function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close: () => void }) {
   const { data, updateData, openModal, notify, openOnboarding } = useWorkbench();
-  const backupData = async () => {
+  const backupData = async (): Promise<string | null> => {
     const books = await Promise.all(data.books.map(async (b) => ({ ...b, content: b.content || await fetchContentText("book", b.id) })));
     const documents = await Promise.all(data.documents.map(async (d) => ({ ...d, content: d.content || await fetchContentText("doc", d.id) })));
-    const blob = new Blob([JSON.stringify({ ...data, books, documents }, null, 2)], { type: "application/json" });
+    const json = JSON.stringify({ ...data, books, documents }, null, 2);
+    const fileName = `工作台备份-${dateKey()}.json`;
+    if (isTauriRuntime) {
+      const path = await saveBackupFile(json, fileName);
+      if (path) notify("备份已保存");
+      return path;
+    }
+    const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `工作台备份-${dateKey()}.json`;
+    link.download = fileName;
     link.click();
     URL.revokeObjectURL(url);
     notify("已导出全部数据备份");
+    return null;
   };
   const restoreData = async (file?: File) => {
     if (!file) return;
@@ -35,6 +43,8 @@ function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close
     } catch { notify("备份文件格式无效"); }
   };
   const today = dateKey();
+  // 备份结果路径（用于显示「打开所在文件夹」按钮）
+  const [backupPath, setBackupPath] = useState<string | null>(null);
   // 烹饪倒计时
   const [cookingActive, setCookingActive] = useState(false);
   const [cookingLeft, setCookingLeft] = useState(0);
@@ -139,7 +149,7 @@ function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close
         )}
       </div>;
     })()}
-    {modal.kind === "backup" && <div><ModalHead eyebrow="DATA" title="数据备份与恢复" copy="把全部数据导出为 JSON 文件备份，或从备份文件恢复。" /><div className="modal-actions"><button type="button" className="button button-soft" onClick={() => { backupData(); close(); }}><Download size={15} /> 备份数据</button><label className="button button-primary"><Upload size={15} /> 恢复数据<input type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(event) => { void restoreData(event.target.files?.[0]); event.currentTarget.value = ""; close(); }} /></label></div></div>}
+    {modal.kind === "backup" && <div><ModalHead eyebrow="DATA" title="数据备份与恢复" copy={backupPath ? "备份已生成，可在下方打开所在文件夹。" : "把全部数据导出为 JSON 文件备份，或从备份文件恢复。"} />{backupPath ? <div className="backup-result"><p>备份已保存到：<code>{backupPath}</code></p><div className="modal-actions"><button type="button" className="button button-soft" onClick={() => { void revealInFolder(backupPath); }}><FolderOpen size={15} /> 打开所在文件夹</button><button type="button" className="button button-primary" onClick={() => { setBackupPath(null); close(); }}>完成</button></div></div> : <div className="modal-actions"><button type="button" className="button button-soft" onClick={async () => { const path = await backupData(); if (path) setBackupPath(path); else close(); }}><Download size={15} /> 备份数据</button><label className="button button-primary"><Upload size={15} /> 恢复数据<input type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(event) => { void restoreData(event.target.files?.[0]); event.currentTarget.value = ""; close(); }} /></label></div>}</div>}
     {modal.kind === "clear" && <div><ModalHead eyebrow="CLEAR" title="清空所有记录" copy="这会删除任务、日程、专注、账单、心情、日记、健康等全部记录，仅保留工作台设置，操作无法撤销。" /><div className="modal-actions"><button type="button" className="button button-soft" onClick={close}>取消</button><button type="button" className="button danger-button" onClick={() => { updateData((current) => ({ ...current, tasks: [], schedule: [], focusSessions: [], ledger: [], moodLogs: {}, diaryEntries: [], health: {}, likedRecipes: [], importedRecipes: [], mealPlan: {}, customWords: [], customRecipes: [], learning: { masteredWords: [], bookmarkedWords: [], studyMinutes: 0, customWords: [] }, books: [], documents: [], noteFolders: [] })); finish("已清空所有记录"); }}>确认清空</button></div></div>}
   </section></div>;
 }

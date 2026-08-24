@@ -13,13 +13,32 @@ use tauri::{
 };
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_notification::NotificationExt;
+use tauri_plugin_dialog::DialogExt;
 use chrono::Timelike;
 
 static IS_QUITTING: AtomicBool = AtomicBool::new(false);
 
 // ── 路径 ────────────────────────────────────────
-fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
+// 便携模式：数据放在程序(exe)旁边的 data/ 目录，整包拷贝即可迁移
+fn data_dir(_app: &AppHandle) -> Result<PathBuf, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let exe_dir = exe.parent().ok_or_else(|| "无法确定程序所在目录".to_string())?;
+    Ok(exe_dir.join("data"))
+}
+
+// 旧版数据存放位置（系统 AppData），仅用于首次迁移
+fn legacy_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|e| e.to_string())
+}
+
+// 首次以便携模式启动时，若 exe 旁还没有数据、但 AppData 有旧数据，则整体迁移过去（只拷贝、不删除旧数据）
+fn migrate_legacy_data(app: &AppHandle) {
+    let Ok(portable) = data_dir(app) else { return };
+    let Ok(legacy) = legacy_data_dir(app) else { return };
+    if !portable.join("workbench-data.json").exists() && legacy.join("workbench-data.json").exists() {
+        let _ = fs::create_dir_all(&portable);
+        let _ = copy_dir(&legacy, &portable);
+    }
 }
 fn data_file(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(data_dir(app)?.join("workbench-data.json"))
@@ -217,6 +236,48 @@ fn save_data(app: AppHandle, value: Value) -> Result<bool, String> {
         .unwrap_or(true);
     apply_auto_launch(&app, auto_launch);
     Ok(true)
+}
+
+#[tauri::command]
+fn save_backup(app: AppHandle, json: String, file_name: String) -> Result<Option<String>, String> {
+    let mut builder = app
+        .dialog()
+        .file()
+        .set_file_name(&file_name)
+        .add_filter("JSON", &["json"]);
+    if let Ok(dir) = data_dir(&app) {
+        builder = builder.set_directory(dir);
+    }
+    let Some(picked) = builder.blocking_save_file() else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+#[tauri::command]
+fn reveal_in_folder(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let select = format!("/select,{}", path);
+        if std::process::Command::new("explorer")
+            .arg(select)
+            .spawn()
+            .is_err()
+        {
+            if let Some(parent) = std::path::Path::new(&path).parent() {
+                let _ = std::process::Command::new("explorer").arg(parent).spawn();
+            }
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            let _ = std::process::Command::new("xdg-open").arg(parent).spawn();
+        }
+    }
+    Ok(())
 }
 
 fn apply_auto_launch(app: &AppHandle, enabled: bool) {
@@ -468,13 +529,17 @@ pub fn run() {
             None,
         ))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             load_data,
             save_data,
             get_content,
-            get_holidays
+            get_holidays,
+            save_backup,
+            reveal_in_folder
         ])
         .setup(|app| {
+            migrate_legacy_data(app.handle());
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
