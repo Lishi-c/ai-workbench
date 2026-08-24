@@ -41,6 +41,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 # 其它
+nul
 *.local
 package.json.[0-9]*
 playwright-report
