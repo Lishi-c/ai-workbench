@@ -113,6 +113,17 @@ export type Document = {
   preview?: string;
   format: "txt" | "md" | "json";
   createdAt: string;
+  folderId?: string | null;
+  order?: number;
+};
+
+export type NoteFolder = {
+  id: string;
+  name: string;
+  color: Tone;
+  emoji: string;
+  parentId: string | null;
+  order: number;
 };
 
 export type WorkbenchData = {
@@ -149,6 +160,7 @@ export type WorkbenchData = {
   };
   books: Book[];
   documents: Document[];
+  noteFolders: NoteFolder[];
 };
 
 export function dateKey(date = new Date()) {
@@ -229,6 +241,7 @@ export function createDefaultWorkbenchData(): WorkbenchData {
     learning: { masteredWords: [], bookmarkedWords: [], studyMinutes: 12, customWords: [] },
     books: [],
     documents: [],
+    noteFolders: [],
   };
 }
 
@@ -256,6 +269,7 @@ export function normalizeWorkbenchData(value?: Partial<WorkbenchData> | null): W
     customRecipes: Array.isArray(value.customRecipes) ? value.customRecipes : defaults.customRecipes,
     learning: { ...defaults.learning, ...(value.learning ?? {}), customWords: Array.isArray(value.learning?.customWords) ? value.learning.customWords : [] },
     books: Array.isArray(value.books) ? value.books.map((b) => ({ ...b, format: b.format === "md" || b.format === "json" ? b.format : "txt" })) : [],
-    documents: Array.isArray(value.documents) ? value.documents.map((d) => ({ ...d, format: (d.format === "md" || d.format === "json") ? d.format : "txt" })) : [],
+    documents: Array.isArray(value.documents) ? value.documents.map((d, i) => ({ ...d, format: (d.format === "md" || d.format === "json") ? d.format : "txt", folderId: d.folderId ?? null, order: typeof d.order === "number" ? d.order : i })) : [],
+    noteFolders: Array.isArray(value.noteFolders) ? value.noteFolders.map((f, i) => ({ ...f, color: f.color, emoji: f.emoji ?? "📁", parentId: f.parentId ?? null, order: typeof f.order === "number" ? f.order : i })) : [],
   };
 }

@@ -1113,6 +1113,37 @@ textarea:focus-visible {
 .entry-tags { display: flex; gap: 5px; margin-top: 11px; }
 .entry-tags span { padding: 4px 7px; border-radius: 7px; background: var(--lilac-soft); color: var(--purple); font-size: 10px; }
 
+/* Notes folders */
+
+.notes-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+
+.note-breadcrumb { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; color: var(--ink-soft); }
+.note-breadcrumb button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-soft); cursor: pointer; font-size: 13px; }
+.note-breadcrumb button:hover { background: var(--lilac-soft); color: var(--purple-deep); }
+.note-breadcrumb button.is-current { background: var(--lilac-soft); color: var(--purple-deep); font-weight: 650; }
+.note-breadcrumb svg { color: var(--purple-mid); }
+
+.folder-card-main { gap: 8px; }
+.folder-emoji { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 14px; font-size: 22px; }
+.folder-card-main h3 { margin-top: 4px; }
+.folder-card.is-drop-into { box-shadow: inset 0 0 0 3px var(--purple); background: var(--lilac-soft); }
+.folder-card .doc-card-foot small { display: inline-flex; align-items: center; gap: 4px; }
+
+.folder-delete-actions { display: flex; flex-direction: column; gap: 9px; margin-top: 24px; }
+.folder-delete-actions .button { width: 100%; justify-content: center; }
+.folder-delete-actions .button small { font-weight: 500; opacity: .85; font-size: 11px; }
+
+.folder-emoji-picker { display: flex; flex-direction: column; gap: 8px; }
+.folder-emoji-quick { display: flex; flex-wrap: wrap; gap: 6px; }
+.folder-emoji-quick button { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); cursor: pointer; font-size: 18px; }
+.folder-emoji-quick button.is-active { border-color: var(--purple); background: var(--lilac-soft); }
+.folder-emoji-picker input { width: 100%; min-height: 45px; padding: 0 13px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); font-size: 14px; }
+
+.folder-tone-row { display: flex; gap: 9px; align-items: center; }
+.folder-tone-dot { width: 30px; height: 30px; border: 0; border-radius: 50%; cursor: pointer; transition: transform 140ms ease, box-shadow 140ms ease; }
+.folder-tone-dot:hover { transform: scale(1.08); }
+.folder-tone-dot.is-active { box-shadow: 0 0 0 3px var(--white), 0 0 0 5px var(--purple); }
+
 /* Editors, feedback and persisted interactions */
 
 .modal-backdrop {
