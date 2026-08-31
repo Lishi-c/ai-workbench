@@ -346,10 +346,16 @@ fn show_window(app: &AppHandle) {
             let _ = window.unminimize();
         }
         let _ = window.show();
-        let _ = window.set_focus();
-        // Windows 上 hidden 窗口 show 后可能不置顶，用「置顶再取消」强制拉前台
+        // Windows 上 hidden 窗口 show 后不会自动置顶（前台锁限制），先置顶绕过限制再抢焦点
         let _ = window.set_always_on_top(true);
-        let _ = window.set_always_on_top(false);
+        let _ = window.set_focus();
+        // 延迟一小段再取消置顶：若在同一 tick 内立刻取消，SetWindowPos 会互相抵消，
+        // 导致窗口仍拉不到前台（托盘呼不出的根因）。
+        let w = window.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            let _ = w.set_always_on_top(false);
+        });
     }
 }
 
