@@ -124,3 +124,46 @@ export async function revealInFolder(path: string): Promise<void> {
     await invoke("reveal_in_folder", { path });
   } catch { /* ignore */ }
 }
+
+export type UpdateInfo = {
+  has_update: boolean;
+  current_version: string;
+  latest_version: string;
+  download_url: string;
+  html_url: string;
+  file_name: string;
+};
+
+export async function getAppVersion(): Promise<string> {
+  if (!isTauri) return "";
+  try {
+    return await invoke<string>("get_app_version");
+  } catch {
+    return "";
+  }
+}
+
+export async function checkForUpdates(): Promise<UpdateInfo | null> {
+  if (!isTauri) return null;
+  try {
+    return await invoke<UpdateInfo>("check_for_updates");
+  } catch {
+    return null;
+  }
+}
+
+export async function downloadUpdate(url: string, fileName: string): Promise<string | null> {
+  if (!isTauri) return null;
+  try {
+    return await invoke<string>("download_update", { url, fileName });
+  } catch {
+    return null;
+  }
+}
+
+export async function installUpdate(path: string): Promise<void> {
+  if (!isTauri) return;
+  try {
+    await invoke("install_update", { path });
+  } catch { /* ignore */ }
+}

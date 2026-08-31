@@ -339,6 +339,128 @@ async fn get_holidays(app: AppHandle, year: i32) -> Result<Value, String> {
     }
 }
 
+// ── 更新检查 ────────────────────────────────────
+#[derive(Serialize)]
+struct UpdateInfo {
+    has_update: bool,
+    current_version: String,
+    latest_version: String,
+    download_url: String,
+    html_url: String,
+    file_name: String,
+}
+
+fn version_newer(a: &str, b: &str) -> bool {
+    let parse = |s: &str| -> Vec<u64> {
+        s.trim_start_matches('v')
+            .split('.')
+            .map(|p| p.parse().unwrap_or(0))
+            .collect()
+    };
+    let av = parse(a);
+    let bv = parse(b);
+    for i in 0..av.len().max(bv.len()) {
+        let x = av.get(i).copied().unwrap_or(0);
+        let y = bv.get(i).copied().unwrap_or(0);
+        if x != y {
+            return x > y;
+        }
+    }
+    false
+}
+
+#[tauri::command]
+fn get_app_version(app: AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+#[tauri::command]
+async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, String> {
+    let current_version = app.package_info().version.to_string();
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let json: Value = client
+        .get("https://api.github.com/repos/Lishi-c/ai-workbench/releases/latest")
+        .header("User-Agent", "lumi-workbench")
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let latest_version = json
+        .get("tag_name")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .trim_start_matches('v')
+        .to_string();
+    let html_url = json
+        .get("html_url")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    let mut download_url = String::new();
+    let mut file_name = String::new();
+    if let Some(assets) = json.get("assets").and_then(Value::as_array) {
+        for a in assets {
+            let name = a.get("name").and_then(Value::as_str).unwrap_or("");
+            if name.ends_with(".exe") || name.ends_with(".msi") {
+                download_url = a
+                    .get("browser_download_url")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                file_name = name.to_string();
+                break;
+            }
+        }
+    }
+
+    let has_update = !latest_version.is_empty() && version_newer(&latest_version, &current_version);
+
+    Ok(UpdateInfo {
+        has_update,
+        current_version,
+        latest_version,
+        download_url,
+        html_url,
+        file_name,
+    })
+}
+
+#[tauri::command]
+async fn download_update(app: AppHandle, url: String, file_name: String) -> Result<String, String> {
+    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(&file_name);
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(600))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let bytes = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?
+        .bytes()
+        .await
+        .map_err(|e| e.to_string())?;
+    fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+fn install_update(app: AppHandle, path: String) -> Result<(), String> {
+    IS_QUITTING.store(true, Ordering::SeqCst);
+    let _ = std::process::Command::new(&path).spawn();
+    app.exit(0);
+    Ok(())
+}
+
 // ── 窗口 / 托盘 ─────────────────────────────────
 fn show_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -542,7 +664,11 @@ pub fn run() {
             get_content,
             get_holidays,
             save_backup,
-            reveal_in_folder
+            reveal_in_folder,
+            get_app_version,
+            check_for_updates,
+            download_update,
+            install_update
         ])
         .setup(|app| {
             migrate_legacy_data(app.handle());

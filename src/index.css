@@ -1150,6 +1150,7 @@ textarea:focus-visible {
 .onboarding-nav { display: flex; gap: 8px; }
 .onboarding-actions .button { height: 40px; padding: 0 16px; font-size: 13px; }
 .settings-guide-row { display: flex; justify-content: flex-start; margin-top: 18px; }
+.update-version { display: inline-flex; align-items: center; margin-left: 12px; font-size: 12px; color: var(--ink-soft); }
 
 .note-breadcrumb { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; color: var(--ink-soft); }
 .note-breadcrumb button { display: inline-flex; align-items: center; gap: 4px; padding: 5px 9px; border: 0; border-radius: 9px; background: transparent; color: var(--ink-soft); cursor: pointer; font-size: 13px; }

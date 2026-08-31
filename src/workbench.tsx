@@ -5,7 +5,7 @@ import { bottomItems, navSections, type ModalState, type PageKey, type Workbench
 import { CommandPalette, EditorModal, ReminderPanel } from "./workbench/overlays";
 import { Onboarding } from "./workbench/onboarding";
 import { DashboardPage, DiaryPage, EnglishPage, FinancePage, FocusPage, HealthPage, LibraryPage, NotesPage, RecipesPage, TasksPage } from "./workbench/pages";
-import { fetchHolidays, loadLocalData, saveLocalData } from "./workbench/storage";
+import { checkForUpdates, downloadUpdate, fetchHolidays, installUpdate, loadLocalData, saveLocalData } from "./workbench/storage";
 import type { HolidayMap } from "./workbench/calendar-festivals";
 import { IconButton, WorkspaceTitle } from "./workbench/ui";
 import { getEscBack, getEscPopup } from "./workbench/esc";
@@ -63,6 +63,24 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
   useEffect(() => {
     let active = true;
     void fetchHolidays(new Date().getFullYear()).then((map) => { if (active) setHolidays(map); });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      const info = await checkForUpdates();
+      if (!active || !info?.has_update || !info.download_url) return;
+      setToast(`发现新版本 v${info.latest_version}，正在下载…`);
+      const path = await downloadUpdate(info.download_url, info.file_name);
+      if (!active) return;
+      if (!path) { setToast("新版本下载失败，可稍后在偏好设置里重试"); return; }
+      if (window.confirm(`已下载新版本 v${info.latest_version}，是否立即安装？\n（安装会关闭工作台并运行安装程序）`)) {
+        void installUpdate(path);
+      } else {
+        setToast("新版本已下载，稍后可在偏好设置里安装");
+      }
+    })();
     return () => { active = false; };
   }, []);
 

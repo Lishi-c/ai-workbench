@@ -6,8 +6,46 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { createId, dateKey, normalizeWorkbenchData, type CustomRecipe, type Tone, type WorkbenchData, type WorkbenchTask } from "../workbench-data";
 import { field, formatMoney, type NavItem, type PageKey, recipeCards, type ModalState, useWorkbench } from "./context";
-import { fetchContentText, isTauriRuntime, readTextFile, revealInFolder, saveBackupFile } from "./storage";
+import { checkForUpdates, downloadUpdate, fetchContentText, getAppVersion, installUpdate, isTauriRuntime, readTextFile, revealInFolder, saveBackupFile } from "./storage";
 import { FormField, FormSelect, IconButton, ModalActions, ModalHead } from "./ui";
+
+function UpdateSection() {
+  const { notify } = useWorkbench();
+  const [version, setVersion] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [readyPath, setReadyPath] = useState<string | null>(null);
+  const [readyVersion, setReadyVersion] = useState("");
+
+  useEffect(() => { void getAppVersion().then(setVersion); }, []);
+
+  const check = async () => {
+    if (busy) return;
+    setBusy(true);
+    const info = await checkForUpdates();
+    if (!info) { setBusy(false); notify("检查更新失败，请检查网络后重试"); return; }
+    if (!info.has_update) { setBusy(false); notify("已是最新版本"); return; }
+    notify(`发现新版本 v${info.latest_version}，正在下载…`);
+    const path = await downloadUpdate(info.download_url, info.file_name);
+    setBusy(false);
+    if (!path) { notify("下载失败，请检查网络后重试"); return; }
+    setReadyPath(path);
+    setReadyVersion(info.latest_version);
+    notify("新版本已下载");
+  };
+
+  const install = () => { if (readyPath) void installUpdate(readyPath); };
+
+  return (
+    <div className="settings-guide-row">
+      {readyPath ? (
+        <button type="button" className="button button-soft" onClick={install}>立即安装</button>
+      ) : (
+        <button type="button" className="button button-soft" onClick={check} disabled={busy}>{busy ? "检查中…" : "检查更新"}</button>
+      )}
+      <span className="update-version">版本 {version ? `v${version}` : "…"}</span>
+    </div>
+  );
+}
 
 function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close: () => void }) {
   const { data, updateData, openModal, notify, openOnboarding } = useWorkbench();
@@ -86,7 +124,7 @@ function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close
     {modal.kind === "transaction" && <form onSubmit={submit}><ModalHead eyebrow="NEW RECORD" title="记一笔" copy="保存后会同时更新结余、预算进度、趋势与分类占比。" /><div className="form-grid"><FormSelect label="类型" name="type" options={[["expense", "支出"], ["income", "收入"]]} /><FormField label="金额" name="amount" type="number" min="0.01" step="0.01" required /><FormSelect label="分类" name="category" options={[["餐饮", "餐饮"], ["购物", "购物"], ["居住", "居住"], ["其他", "其他"], ["收入", "收入"]]} /><FormField label="说明" name="note" required placeholder="例如：午后咖啡" /><FormField label="日期" name="date" type="date" defaultValue={today} required /><FormField label="时间" name="time" type="time" defaultValue={new Date().toTimeString().slice(0, 5)} required /></div><ModalActions close={close} label="保存账单" /></form>}
     {modal.kind === "budget" && <form onSubmit={submit}><ModalHead eyebrow="BUDGET" title="设置本月预算" copy="预算只控制支出目标，实际使用额始终来自账单。" /><FormField label="预算金额" name="budget" type="number" min="0" defaultValue={String(data.settings.monthlyBudget)} required /><ModalActions close={close} label="更新预算" /></form>}
     {modal.kind === "health" && <form onSubmit={submit}><ModalHead eyebrow="WELLNESS" title="记录今日健康" copy="仪表盘只展示你在这里输入的真实数据。" /><div className="form-grid"><FormField label="步数" name="steps" type="number" min="0" defaultValue={String(currentHealth?.steps ?? 0)} /><FormField label="睡眠小时" name="sleepHours" type="number" min="0" max="24" defaultValue={String(Math.floor((currentHealth?.sleepMinutes ?? 0) / 60))} /><FormField label="睡眠分钟" name="sleepMinutes" type="number" min="0" max="59" defaultValue={String((currentHealth?.sleepMinutes ?? 0) % 60)} /><FormField label="睡眠质量 %" name="sleepQuality" type="number" min="0" max="100" defaultValue={String(currentHealth?.sleepQuality ?? 0)} /><FormField label="静息心率" name="heartRate" type="number" min="0" defaultValue={String(currentHealth?.heartRate ?? 0)} /><FormField label="活跃分钟" name="activeMinutes" type="number" min="0" defaultValue={String(currentHealth?.activeMinutes ?? 0)} /><FormField label="消耗千卡" name="calories" type="number" min="0" defaultValue={String(currentHealth?.calories ?? 0)} /><FormField label="训练次数" name="workouts" type="number" min="0" defaultValue={String(currentHealth?.workouts ?? 0)} /></div><ModalActions close={close} label="保存健康数据" /></form>}
-    {modal.kind === "settings" && <form onSubmit={submit}><ModalHead eyebrow="PREFERENCES" title="工作台偏好" copy="修改名字与目标后，侧栏、问候语和进度卡会同步更新。" /><div className="form-grid"><FormField label="称呼" name="displayName" defaultValue={data.settings.displayName} required /><FormField label="工作台标题" name="workspaceTitle" defaultValue={data.settings.workspaceTitle} required /><FormField label="副标题" name="workspaceSubtitle" defaultValue={data.settings.workspaceSubtitle} required /><FormField label="每周任务目标" name="weeklyTaskGoal" type="number" min="1" defaultValue={String(data.settings.weeklyTaskGoal)} /><FormSelect label="字体大小" name="fontScale" defaultValue={String(data.settings.fontScale)} options={[["0.9", "较小"], ["1", "标准"], ["1.15", "大"], ["1.3", "特大"]]} /><FormSelect label="提醒提前量" name="reminderAdvanceMinutes" defaultValue={String(data.settings.reminderAdvanceMinutes)} options={[["0", "到点提醒"], ["5", "提前 5 分钟"], ["10", "提前 10 分钟"], ["15", "提前 15 分钟"], ["30", "提前 30 分钟"]]} /><FormSelect label="外观主题" name="theme" defaultValue={String(data.settings.theme)} options={[["light", "浅色"], ["dark", "深色"]]} /><label className="check-field"><input type="checkbox" name="autoLaunch" defaultChecked={data.settings.autoLaunch} /><span>开机自动启动</span></label></div><div className="settings-guide-row"><button type="button" className="button button-soft" onClick={() => { close(); openOnboarding(); }}>重新打开新手引导</button></div><ModalActions close={close} label="保存偏好" /></form>}
+    {modal.kind === "settings" && <form onSubmit={submit}><ModalHead eyebrow="PREFERENCES" title="工作台偏好" copy="修改名字与目标后，侧栏、问候语和进度卡会同步更新。" /><div className="form-grid"><FormField label="称呼" name="displayName" defaultValue={data.settings.displayName} required /><FormField label="工作台标题" name="workspaceTitle" defaultValue={data.settings.workspaceTitle} required /><FormField label="副标题" name="workspaceSubtitle" defaultValue={data.settings.workspaceSubtitle} required /><FormField label="每周任务目标" name="weeklyTaskGoal" type="number" min="1" defaultValue={String(data.settings.weeklyTaskGoal)} /><FormSelect label="字体大小" name="fontScale" defaultValue={String(data.settings.fontScale)} options={[["0.9", "较小"], ["1", "标准"], ["1.15", "大"], ["1.3", "特大"]]} /><FormSelect label="提醒提前量" name="reminderAdvanceMinutes" defaultValue={String(data.settings.reminderAdvanceMinutes)} options={[["0", "到点提醒"], ["5", "提前 5 分钟"], ["10", "提前 10 分钟"], ["15", "提前 15 分钟"], ["30", "提前 30 分钟"]]} /><FormSelect label="外观主题" name="theme" defaultValue={String(data.settings.theme)} options={[["light", "浅色"], ["dark", "深色"]]} /><label className="check-field"><input type="checkbox" name="autoLaunch" defaultChecked={data.settings.autoLaunch} /><span>开机自动启动</span></label></div><div className="settings-guide-row"><button type="button" className="button button-soft" onClick={() => { close(); openOnboarding(); }}>重新打开新手引导</button></div><UpdateSection /><ModalActions close={close} label="保存偏好" /></form>}
     {modal.kind === "meal" && <form onSubmit={submit}><ModalHead eyebrow="MEAL PLAN" title={`安排周${modal.payload ?? "五"}餐单`} copy="选择后会写入一周餐桌。" /><FormSelect label="食谱" name="recipe" defaultValue={data.mealPlan[modal.payload ?? "五"]} options={[...recipeCards.map((item) => [item.title, item.title]), ...data.customRecipes.map((item) => [item.title, item.title]), ...data.importedRecipes.map((item) => [item.title, item.title])]} /><ModalActions close={close} label="保存餐单" /></form>}
     {modal.kind === "addRecipe" && (() => {
       const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
