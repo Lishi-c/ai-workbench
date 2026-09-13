@@ -60,10 +60,29 @@ export type HealthRecord = {
   sleepMinutes: number;
   sleepQuality: number;
   heartRate: number;
-  activeMinutes: number;
-  calories: number;
-  workouts: number;
   water: number;
+};
+
+export type HealthMetricKind = "weight" | "bp" | "glucose";
+
+export type HealthMetric = {
+  id: string;
+  kind: HealthMetricKind;
+  value: number;
+  value2?: number;
+  date: string;
+  time: string;
+  note?: string;
+};
+
+export type Supplement = {
+  id: string;
+  name: string;
+  dose: string;
+  times: string[];
+  weekdays: number[];
+  enabled: boolean;
+  logs: Record<string, string[]>;
 };
 
 export type ImportedRecipe = {
@@ -139,6 +158,7 @@ export type WorkbenchData = {
     theme: "light" | "dark";
     autoLaunch: boolean;
     onboardingDone: boolean;
+    healthGoals: { steps: number; sleepMinutes: number; water: number };
   };
   tasks: WorkbenchTask[];
   schedule: ScheduleItem[];
@@ -147,6 +167,8 @@ export type WorkbenchData = {
   moodLogs: Record<string, MoodId>;
   diaryEntries: DiaryEntry[];
   health: Record<string, HealthRecord>;
+  healthMetrics: HealthMetric[];
+  supplements: Supplement[];
   likedRecipes: string[];
   importedRecipes: ImportedRecipe[];
   mealPlan: Record<string, string>;
@@ -197,6 +219,7 @@ export function createDefaultWorkbenchData(): WorkbenchData {
       theme: "light",
       autoLaunch: true,
       onboardingDone: false,
+      healthGoals: { steps: 10000, sleepMinutes: 420, water: 8 },
     },
     tasks: [
       { id: "task-1", title: "整理工作台页面架构", meta: "个人项目", date: today, time: "09:30", tag: "设计", tone: "purple", done: true, focusMinutes: 80 },
@@ -233,8 +256,10 @@ export function createDefaultWorkbenchData(): WorkbenchData {
       { id: "diary-2", date: shiftedDateKey(-2), time: "23:14", title: "终于把拖延很久的事情做完了", content: "开始之前总觉得很难，真正动手之后反而比想象中轻松。给今天的自己一个拥抱。", tags: ["成长", "完成感"], mood: "great" },
     ],
     health: {
-      [today]: { steps: 7842, sleepMinutes: 456, sleepQuality: 92, heartRate: 68, activeMinutes: 52, calories: 430, workouts: 1, water: 5 },
+      [today]: { steps: 7842, sleepMinutes: 456, sleepQuality: 92, heartRate: 68, water: 5 },
     },
+    healthMetrics: [],
+    supplements: [],
     likedRecipes: ["莓果酸奶碗"],
     importedRecipes: [],
     mealPlan: { "一": "轻食", "二": "汤面", "三": "三明治", "四": "咖喱", "五": "奶油南瓜意面", "六": "炖菜", "日": "添加" },
@@ -250,7 +275,7 @@ export function createDefaultWorkbenchData(): WorkbenchData {
 export function normalizeWorkbenchData(value?: Partial<WorkbenchData> | null): WorkbenchData {
   const defaults = createDefaultWorkbenchData();
   if (!value) return defaults;
-  const settings = { ...defaults.settings, ...(value.settings ?? {}) };
+  const settings = { ...defaults.settings, ...(value.settings ?? {}), healthGoals: { ...defaults.settings.healthGoals, ...(value.settings?.healthGoals ?? {}) } };
   if (settings.workspaceSubtitle === "记录日常，也收藏灵感") settings.workspaceSubtitle = "TODAY · GOOD DAY";
   return {
     ...defaults,
@@ -264,6 +289,8 @@ export function normalizeWorkbenchData(value?: Partial<WorkbenchData> | null): W
     moodLogs: value.moodLogs ?? defaults.moodLogs,
     diaryEntries: Array.isArray(value.diaryEntries) ? value.diaryEntries : defaults.diaryEntries,
     health: value.health ?? defaults.health,
+    healthMetrics: Array.isArray(value.healthMetrics) ? value.healthMetrics.map((m) => ({ ...m, note: m.note ?? "", value2: typeof m.value2 === "number" ? m.value2 : undefined })) : [],
+    supplements: Array.isArray(value.supplements) ? value.supplements.map((s) => ({ id: s.id, name: s.name, dose: s.dose ?? "", times: Array.isArray(s.times) ? s.times : [], weekdays: Array.isArray(s.weekdays) ? s.weekdays : [], enabled: s.enabled !== false, logs: s.logs ?? {} })) : [],
     likedRecipes: Array.isArray(value.likedRecipes) ? value.likedRecipes : defaults.likedRecipes,
     importedRecipes: Array.isArray(value.importedRecipes) ? value.importedRecipes : defaults.importedRecipes,
     mealPlan: value.mealPlan ?? defaults.mealPlan,

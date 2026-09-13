@@ -1,5 +1,5 @@
-import { Check, Trash2, X } from "lucide-react";
-import { useEffect } from "react";
+import { Check, MoreHorizontal, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { createId, dateKey, type WorkbenchTask } from "../workbench-data";
 import { useWorkbench } from "./context";
 import { setEscPopup } from "./esc";
@@ -10,8 +10,8 @@ export function WorkspaceTitle({ title }: { title: string }) {
   return <>{title.slice(0, breakAt + 1)}<br />{title.slice(breakAt + 1)}</>;
 }
 
-export function IconButton({ label, children, onClick, className = "" }: { label: string; children: React.ReactNode; onClick?: () => void; className?: string }) {
-  return <button type="button" className={`icon-button ${className}`} aria-label={label} onClick={onClick}>{children}</button>;
+export function IconButton({ label, children, onClick, className = "", disabled = false }: { label: string; children: React.ReactNode; onClick?: () => void; className?: string; disabled?: boolean }) {
+  return <button type="button" className={`icon-button ${className}`} aria-label={label} onClick={onClick} disabled={disabled}>{children}</button>;
 }
 
 export function SectionTitle({ eyebrow, title, action }: { eyebrow?: string; title: string; action?: React.ReactNode }) {
@@ -34,6 +34,17 @@ export function PageIntro({ eyebrow, title, copy, actions }: { eyebrow: string; 
 
 export function TaskRow({ task, compact = false }: { task: WorkbenchTask; compact?: boolean }) {
   const { updateData, notify } = useWorkbench();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handle = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [menuOpen]);
   const toggle = () => {
     updateData((current) => {
       let tasks = current.tasks.map((item) => item.id === task.id ? { ...item, done: !item.done } : item);
@@ -47,7 +58,12 @@ export function TaskRow({ task, compact = false }: { task: WorkbenchTask; compac
     });
     notify(task.done ? "任务已恢复为待完成" : task.repeat ? "任务已完成，已自动生成下一次" : "任务已完成，仪表盘进度已同步");
   };
-  return <button type="button" className={`task-row ${task.done ? "is-done" : ""} ${compact ? "is-compact" : ""}`} onClick={toggle}><span className={`task-check tone-${task.tone}`}>{task.done && <Check size={14} strokeWidth={3} />}</span><span className="task-copy"><strong>{task.title}</strong><small>{task.meta}</small></span><span className={`task-tag tone-${task.tone}`}>{task.repeat ? `${task.tag} · ${task.repeat === "daily" ? "每天" : task.repeat === "weekly" ? "每周" : "每月"}` : task.tag}</span><time>{task.time}</time></button>;
+  const remove = () => {
+    updateData((current) => ({ ...current, tasks: current.tasks.filter((item) => item.id !== task.id) }));
+    setConfirming(false);
+    notify("已删除任务");
+  };
+  return <div className={`task-row ${task.done ? "is-done" : ""} ${compact ? "is-compact" : ""}`} role="button" tabIndex={0} onClick={toggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}><span className={`task-check tone-${task.tone}`}>{task.done && <Check size={14} strokeWidth={3} />}</span><span className="task-copy"><strong>{task.title}</strong><small>{task.meta}</small></span><span className={`task-tag tone-${task.tone}`}>{task.repeat ? `${task.tag} · ${task.repeat === "daily" ? "每天" : task.repeat === "weekly" ? "每周" : "每月"}` : task.tag}</span><time>{task.time}</time><div className="task-more" ref={menuRef} onClick={(event) => event.stopPropagation()}><IconButton label="更多操作" onClick={() => setMenuOpen((v) => !v)}><MoreHorizontal size={16} /></IconButton>{menuOpen && <div className="task-more-pop"><button type="button" onClick={() => { setMenuOpen(false); setConfirming(true); }}><Trash2 size={14} /> 删除任务</button></div>}</div>{confirming && <ConfirmDialog title="删除这个任务？" copy="删除后无法恢复，且无法撤销。" onCancel={() => setConfirming(false)} onConfirm={remove} />}</div>;
 }
 
 export function ModalHead({ eyebrow, title, copy }: { eyebrow: string; title: string; copy: string }) { return <header className="modal-head"><span className="section-eyebrow">{eyebrow}</span><h2 id="modal-title">{title}</h2><p>{copy}</p></header>; }

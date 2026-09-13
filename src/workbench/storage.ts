@@ -117,6 +117,16 @@ export async function saveBackupFile(json: string, fileName: string): Promise<st
   }
 }
 
+// 导出文本到用户指定位置（JSON/Markdown/TXT）：弹「另存为」对话框，返回保存路径；取消返回 null
+export async function saveExportFile(content: string, fileName: string, format: "json" | "md" | "txt"): Promise<string | null> {
+  if (!isTauri) return null;
+  try {
+    return await invoke<string | null>("save_export", { content, fileName, format });
+  } catch {
+    return null;
+  }
+}
+
 // 打开文件所在目录并选中该文件（Windows 用 explorer /select）
 export async function revealInFolder(path: string): Promise<void> {
   if (!isTauri) return;

@@ -1,11 +1,11 @@
 import {
   BookOpen, CalendarCheck2, Check, CheckSquare2, ChevronRight, Clock3,
-  Download, FileUp, FolderOpen, HeartPulse, Pause, PenLine, Play, RotateCcw, Search,
+  ChevronDown, ChevronUp, Download, FileUp, FolderOpen, HeartPulse, Pause, PenLine, Pill, Play, Plus, RotateCcw, Search,
   TimerReset, Trash2, Upload, WalletCards, X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { createId, dateKey, normalizeWorkbenchData, type CustomRecipe, type Tone, type WorkbenchData, type WorkbenchTask } from "../workbench-data";
-import { field, formatMoney, type NavItem, type PageKey, recipeCards, type ModalState, useWorkbench } from "./context";
+import { createId, dateKey, normalizeWorkbenchData, type CustomRecipe, type HealthMetric, type Supplement, type Tone, type WorkbenchData, type WorkbenchTask } from "../workbench-data";
+import { field, formatMoney, type NavItem, type PageKey, recipeCards, type ModalState, useWorkbench, weekdays } from "./context";
 import { checkForUpdates, downloadUpdate, fetchContentText, getAppVersion, installUpdate, isTauriRuntime, readTextFile, revealInFolder, saveBackupFile } from "./storage";
 import { FormField, FormSelect, IconButton, ModalActions, ModalHead } from "./ui";
 
@@ -45,6 +45,106 @@ function UpdateSection() {
       <span className="update-version">版本 {version ? `v${version}` : "…"}</span>
     </div>
   );
+}
+
+function SupplementModal({ close }: { close: () => void }) {
+  const { data, updateData, notify } = useWorkbench();
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [dose, setDose] = useState("");
+  const [times, setTimes] = useState<string[]>(["08:00"]);
+  const [weekdaySet, setWeekdaySet] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
+  const [enabled, setEnabled] = useState(true);
+
+  const startNew = () => { setEditingId("new"); setName(""); setDose(""); setTimes(["08:00"]); setWeekdaySet([0, 1, 2, 3, 4, 5, 6]); setEnabled(true); };
+  const startEdit = (s: Supplement) => { setEditingId(s.id); setName(s.name); setDose(s.dose); setTimes(s.times.length ? s.times : ["08:00"]); setWeekdaySet(s.weekdays.length ? s.weekdays : [0, 1, 2, 3, 4, 5, 6]); setEnabled(s.enabled); };
+
+  const save = () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) { notify("请填写补剂名称"); return; }
+    const validTimes = times.map((t) => t.trim()).filter(Boolean);
+    if (!validTimes.length) { notify("至少设置一个提醒时间"); return; }
+    if (editingId === "new") {
+      updateData((current) => ({ ...current, supplements: [...current.supplements, { id: createId("supp"), name: trimmedName, dose: dose.trim(), times: validTimes, weekdays: weekdaySet, enabled, logs: {} }] }));
+      notify("已添加补剂");
+    } else if (editingId) {
+      updateData((current) => ({ ...current, supplements: current.supplements.map((s) => s.id === editingId ? { ...s, name: trimmedName, dose: dose.trim(), times: validTimes, weekdays: weekdaySet, enabled } : s) }));
+      notify("已保存补剂");
+    }
+    setEditingId(null);
+  };
+
+  const remove = (id: string) => {
+    updateData((current) => ({ ...current, supplements: current.supplements.filter((s) => s.id !== id) }));
+    notify("已删除补剂");
+  };
+
+  const toggleEnabled = (id: string) => {
+    updateData((current) => ({ ...current, supplements: current.supplements.map((s) => s.id === id ? { ...s, enabled: !s.enabled } : s) }));
+  };
+
+  const moveSupplement = (id: string, direction: -1 | 1) => {
+    updateData((current) => {
+      const list = [...current.supplements];
+      const index = list.findIndex((s) => s.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= list.length) return current;
+      [list[index], list[target]] = [list[target], list[index]];
+      return { ...current, supplements: list };
+    });
+  };
+
+  const setTimeAt = (index: number, value: string) => setTimes((arr) => arr.map((t, i) => i === index ? value : t));
+  const addTime = () => setTimes((arr) => [...arr, "20:00"]);
+  const removeTime = (index: number) => setTimes((arr) => arr.filter((_, i) => i !== index));
+  const toggleWeekday = (d: number) => setWeekdaySet((arr) => arr.includes(d) ? arr.filter((x) => x !== d) : [...arr, d].sort((a, b) => a - b));
+  const weekdayLabel = (arr: number[]) => arr.length === 7 ? "每天" : arr.map((d) => weekdays[d]).join("、");
+
+  if (editingId === null) {
+    return <>
+      <ModalHead eyebrow="SUPPLEMENTS" title="补剂管理" copy="添加每天要吃的补剂，设置剂量、提醒时间与每周哪几天。" />
+      <div className="supplement-admin-list">
+        {data.supplements.length ? data.supplements.map((s, index) => (
+          <div className="supplement-admin-row" key={s.id}>
+            <button type="button" className="supplement-admin-main" onClick={() => startEdit(s)}>
+              <strong>{s.name}</strong>
+              <small>{s.dose}{s.times.length ? ` · ${s.times.join(" / ")}` : ""}{s.enabled ? ` · ${weekdayLabel(s.weekdays)}` : " · 已停用"}</small>
+            </button>
+            <div className="supplement-move">
+              <IconButton label="上移" disabled={index === 0} onClick={() => moveSupplement(s.id, -1)}><ChevronUp size={14} /></IconButton>
+              <IconButton label="下移" disabled={index === data.supplements.length - 1} onClick={() => moveSupplement(s.id, 1)}><ChevronDown size={14} /></IconButton>
+            </div>
+            <button type="button" className={`admin-toggle ${s.enabled ? "on" : ""}`} onClick={() => toggleEnabled(s.id)}>{s.enabled ? "启用" : "停用"}</button>
+            <IconButton label="删除补剂" onClick={() => remove(s.id)}><Trash2 size={15} /></IconButton>
+          </div>
+        )) : <div className="empty-state compact-empty"><Pill size={28} /><strong>还没有补剂</strong><span>点下方「添加补剂」开始</span></div>}
+      </div>
+      <div className="modal-actions"><button type="button" className="button button-soft" onClick={close}>关闭</button><button type="button" className="button button-primary" onClick={startNew}><Plus size={15} /> 添加补剂</button></div>
+    </>;
+  }
+  return <>
+    <ModalHead eyebrow={editingId === "new" ? "NEW SUPPLEMENT" : "EDIT SUPPLEMENT"} title={editingId === "new" ? "添加补剂" : "编辑补剂"} copy="设置补剂名称、剂量、提醒时间与每周哪几天。" />
+    <div className="form-grid">
+      <FormField label="补剂名称" name="supp-name" value={name} onChange={(event) => setName(event.target.value)} placeholder="例如：维生素D" />
+      <FormField label="剂量" name="supp-dose" value={dose} onChange={(event) => setDose(event.target.value)} placeholder="例如：1000 IU / 2 片" />
+      <div className="form-field full-field"><span>提醒时间</span>
+        <div className="supp-time-list">
+          {times.map((t, index) => (
+            <div className="supp-time-row" key={index}>
+              <input type="time" value={t} onChange={(event) => setTimeAt(index, event.target.value)} />
+              <IconButton label="删除该时间" onClick={() => removeTime(index)}><X size={14} /></IconButton>
+            </div>
+          ))}
+          <button type="button" className="button button-soft" onClick={addTime}><Plus size={14} /> 添加时间点</button>
+        </div>
+      </div>
+      <div className="form-field full-field"><span>每周哪几天</span>
+        <div className="supp-weekdays">{weekdays.map((label, d) => <button type="button" key={d} className={weekdaySet.includes(d) ? "on" : ""} onClick={() => toggleWeekday(d)}>{label}</button>)}</div>
+      </div>
+      <label className="check-field"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} /><span>启用提醒</span></label>
+    </div>
+    <div className="modal-actions"><button type="button" className="button button-soft" onClick={() => setEditingId(null)}>返回</button><button type="button" className="button button-primary" onClick={save}>保存</button></div>
+  </>;
 }
 
 function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close: () => void }) {
@@ -108,13 +208,28 @@ function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close
     }
     if (modal.kind === "budget") { updateData((current) => ({ ...current, settings: { ...current.settings, monthlyBudget: Math.max(0, Number(field(form, "budget"))) } })); finish("本月预算已更新"); }
     if (modal.kind === "health") {
-      updateData((current) => ({ ...current, health: { ...current.health, [today]: { steps: Number(field(form, "steps")), sleepMinutes: Number(field(form, "sleepHours")) * 60 + Number(field(form, "sleepMinutes")), sleepQuality: Number(field(form, "sleepQuality")), heartRate: Number(field(form, "heartRate")), activeMinutes: Number(field(form, "activeMinutes")), calories: Number(field(form, "calories")), workouts: Number(field(form, "workouts")), water: current.health[today]?.water ?? 0 } } })); finish("今日健康数据已更新");
+      updateData((current) => ({ ...current, health: { ...current.health, [today]: { steps: Number(field(form, "steps")), sleepMinutes: Number(field(form, "sleepHours")) * 60 + Number(field(form, "sleepMinutes")), sleepQuality: Number(field(form, "sleepQuality")), heartRate: Number(field(form, "heartRate")), water: current.health[today]?.water ?? 0 } } })); finish("今日健康数据已更新");
+    }
+    if (modal.kind === "healthMetric") {
+      const kind = field(form, "kind") as "weight" | "bp" | "glucose";
+      const value = Number(field(form, "value"));
+      if (!value || value <= 0) { notify("请输入有效数值"); return; }
+      const metric: HealthMetric = { id: createId("metric"), kind, value, date: field(form, "date"), time: field(form, "time"), note: field(form, "note") };
+      if (kind === "bp") {
+        const value2 = Number(field(form, "value2"));
+        if (!value2 || value2 <= 0) { notify("请输入舒张压"); return; }
+        metric.value2 = value2;
+      }
+      updateData((current) => ({ ...current, healthMetrics: [metric, ...current.healthMetrics] }));
+      finish("健康指标已记录");
     }
     if (modal.kind === "settings") { updateData((current) => ({ ...current, settings: { ...current.settings, displayName: field(form, "displayName"), workspaceTitle: field(form, "workspaceTitle"), workspaceSubtitle: field(form, "workspaceSubtitle"), weeklyTaskGoal: Number(field(form, "weeklyTaskGoal")), fontScale: Number(field(form, "fontScale") || "1"), reminderAdvanceMinutes: Number(field(form, "reminderAdvanceMinutes") || "0"), theme: (field(form, "theme") as "light" | "dark") || "light", autoLaunch: form.get("autoLaunch") === "on" } })); finish("工作台偏好已保存"); }
     if (modal.kind === "meal") { updateData((current) => ({ ...current, mealPlan: { ...current.mealPlan, [modal.payload ?? "五"]: field(form, "recipe") } })); finish(`周${modal.payload ?? "五"}餐单已更新`); }
     if (modal.kind === "addRecipe") { const recipe: CustomRecipe = { id: createId("custom-recipe"), title: field(form, "title"), content: field(form, "content"), meta: field(form, "meta") || "自定义食谱", tag: field(form, "tag") || "自创", tone: field(form, "tone") as Tone, image: field(form, "image") || "https://miaoda-site-img.cdn.bcebos.com/images/MiaoTu_020cbc37-5ef5-4abf-bfa9-df2520dadbb1.jpg" }; updateData((current) => ({ ...current, customRecipes: [recipe, ...current.customRecipes] })); finish("自定义食谱已添加"); }
   };
   const deleteEvent = (id: string) => { updateData((current) => ({ ...current, schedule: current.schedule.filter((item) => item.id !== id) })); notify("日程已删除"); };
+  const deleteMetric = (id: string) => { updateData((current) => ({ ...current, healthMetrics: current.healthMetrics.filter((m) => m.id !== id) })); notify("指标已删除"); };
+  const updateGoal = (key: "steps" | "sleepMinutes" | "water", value: number) => { updateData((current) => ({ ...current, settings: { ...current.settings, healthGoals: { ...current.settings.healthGoals, [key]: value } } })); };
   const recipe = recipeCards.find((item) => item.title === modal.payload) ?? data.customRecipes.find((item) => item.id === modal.payload || item.title === modal.payload) ?? data.importedRecipes.find((item) => item.id === modal.payload);
   const currentHealth = data.health[today];
   return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}><section className="editor-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><IconButton label="关闭" className="modal-close" onClick={close}><X size={18} /></IconButton>
@@ -123,8 +238,11 @@ function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close
     {modal.kind === "schedule" && <form onSubmit={submit}><ModalHead eyebrow="SCHEDULE" title="管理日程" copy="日程记录固定时间、地点和时长；它不需要勾选完成，也不会计入任务目标。" /><div className="modal-record-list">{data.schedule.filter((item) => item.date === planningDate).sort((a, b) => a.time.localeCompare(b.time)).map((item) => <div key={item.id}><span className={`schedule-dot ${item.tone}`} /><p><strong>{item.time} · {item.title}</strong><small>{item.location} · {item.duration} 分钟{item.sourceTaskId ? " · 关联任务" : ""}</small></p><IconButton label="删除日程" onClick={() => deleteEvent(item.id)}><Trash2 size={16} /></IconButton></div>)}</div><div className="modal-divider"><span>添加新日程</span></div><div className="form-grid"><FormField label="日程名称" name="title" required /><FormField label="日期" name="date" type="date" defaultValue={planningDate} required /><FormField label="时间" name="time" type="time" defaultValue="10:00" required /><FormField label="地点" name="location" required /><FormField label="时长（分钟）" name="duration" type="number" defaultValue="30" min="1" /><FormSelect label="色彩" name="tone" options={[["purple", "粉紫"], ["pink", "柔粉"], ["blue", "雾蓝"], ["sand", "暖杏"]]} /></div><ModalActions close={close} label="添加日程" /></form>}
     {modal.kind === "transaction" && <form onSubmit={submit}><ModalHead eyebrow="NEW RECORD" title="记一笔" copy="保存后会同时更新结余、预算进度、趋势与分类占比。" /><div className="form-grid"><FormSelect label="类型" name="type" options={[["expense", "支出"], ["income", "收入"]]} /><FormField label="金额" name="amount" type="number" min="0.01" step="0.01" required /><FormSelect label="分类" name="category" options={[["餐饮", "餐饮"], ["购物", "购物"], ["居住", "居住"], ["其他", "其他"], ["收入", "收入"]]} /><FormField label="说明" name="note" required placeholder="例如：午后咖啡" /><FormField label="日期" name="date" type="date" defaultValue={today} required /><FormField label="时间" name="time" type="time" defaultValue={new Date().toTimeString().slice(0, 5)} required /></div><ModalActions close={close} label="保存账单" /></form>}
     {modal.kind === "budget" && <form onSubmit={submit}><ModalHead eyebrow="BUDGET" title="设置本月预算" copy="预算只控制支出目标，实际使用额始终来自账单。" /><FormField label="预算金额" name="budget" type="number" min="0" defaultValue={String(data.settings.monthlyBudget)} required /><ModalActions close={close} label="更新预算" /></form>}
-    {modal.kind === "health" && <form onSubmit={submit}><ModalHead eyebrow="WELLNESS" title="记录今日健康" copy="仪表盘只展示你在这里输入的真实数据。" /><div className="form-grid"><FormField label="步数" name="steps" type="number" min="0" defaultValue={String(currentHealth?.steps ?? 0)} /><FormField label="睡眠小时" name="sleepHours" type="number" min="0" max="24" defaultValue={String(Math.floor((currentHealth?.sleepMinutes ?? 0) / 60))} /><FormField label="睡眠分钟" name="sleepMinutes" type="number" min="0" max="59" defaultValue={String((currentHealth?.sleepMinutes ?? 0) % 60)} /><FormField label="睡眠质量 %" name="sleepQuality" type="number" min="0" max="100" defaultValue={String(currentHealth?.sleepQuality ?? 0)} /><FormField label="静息心率" name="heartRate" type="number" min="0" defaultValue={String(currentHealth?.heartRate ?? 0)} /><FormField label="活跃分钟" name="activeMinutes" type="number" min="0" defaultValue={String(currentHealth?.activeMinutes ?? 0)} /><FormField label="消耗千卡" name="calories" type="number" min="0" defaultValue={String(currentHealth?.calories ?? 0)} /><FormField label="训练次数" name="workouts" type="number" min="0" defaultValue={String(currentHealth?.workouts ?? 0)} /></div><ModalActions close={close} label="保存健康数据" /></form>}
+    {modal.kind === "health" && <form onSubmit={submit}><ModalHead eyebrow="WELLNESS" title="记录今日健康" copy="仪表盘只展示你在这里输入的真实数据。" /><div className="form-grid"><FormField label="步数" name="steps" type="number" min="0" defaultValue={String(currentHealth?.steps ?? 0)} /><FormField label="睡眠小时" name="sleepHours" type="number" min="0" max="24" defaultValue={String(Math.floor((currentHealth?.sleepMinutes ?? 0) / 60))} /><FormField label="睡眠分钟" name="sleepMinutes" type="number" min="0" max="59" defaultValue={String((currentHealth?.sleepMinutes ?? 0) % 60)} /><FormField label="睡眠质量 %" name="sleepQuality" type="number" min="0" max="100" defaultValue={String(currentHealth?.sleepQuality ?? 0)} /><FormField label="静息心率" name="heartRate" type="number" min="0" defaultValue={String(currentHealth?.heartRate ?? 0)} /></div><ModalActions close={close} label="保存健康数据" /></form>}
     {modal.kind === "settings" && <form onSubmit={submit}><ModalHead eyebrow="PREFERENCES" title="工作台偏好" copy="修改名字与目标后，侧栏、问候语和进度卡会同步更新。" /><div className="form-grid"><FormField label="称呼" name="displayName" defaultValue={data.settings.displayName} required /><FormField label="工作台标题" name="workspaceTitle" defaultValue={data.settings.workspaceTitle} required /><FormField label="副标题" name="workspaceSubtitle" defaultValue={data.settings.workspaceSubtitle} required /><FormField label="每周任务目标" name="weeklyTaskGoal" type="number" min="1" defaultValue={String(data.settings.weeklyTaskGoal)} /><FormSelect label="字体大小" name="fontScale" defaultValue={String(data.settings.fontScale)} options={[["0.9", "较小"], ["1", "标准"], ["1.15", "大"], ["1.3", "特大"]]} /><FormSelect label="提醒提前量" name="reminderAdvanceMinutes" defaultValue={String(data.settings.reminderAdvanceMinutes)} options={[["0", "到点提醒"], ["5", "提前 5 分钟"], ["10", "提前 10 分钟"], ["15", "提前 15 分钟"], ["30", "提前 30 分钟"]]} /><FormSelect label="外观主题" name="theme" defaultValue={String(data.settings.theme)} options={[["light", "浅色"], ["dark", "深色"]]} /><label className="check-field"><input type="checkbox" name="autoLaunch" defaultChecked={data.settings.autoLaunch} /><span>开机自动启动</span></label></div><div className="settings-guide-row"><button type="button" className="button button-soft" onClick={() => { close(); openOnboarding(); }}>重新打开新手引导</button></div><UpdateSection /><ModalActions close={close} label="保存偏好" /></form>}
+    {modal.kind === "healthMetric" && <form onSubmit={submit}><ModalHead eyebrow="VITALS" title="健康指标" copy="记录新数据；下方可查看并按条删除历史记录。" /><div className="form-grid"><FormSelect label="类型" name="kind" options={[["weight", "体重 (kg)"], ["bp", "血压 (mmHg)"], ["glucose", "血糖 (mmol/L)"]]} /><FormField label="数值" name="value" type="number" min="0" step="0.1" required /><FormField label="舒张压（仅血压填写）" name="value2" type="number" min="0" /><FormField label="备注（如空腹/餐后）" name="note" placeholder="选填" /><FormField label="日期" name="date" type="date" defaultValue={today} required /><FormField label="时间" name="time" type="time" defaultValue={new Date().toTimeString().slice(0, 5)} required /></div><ModalActions close={close} label="保存指标" />{data.healthMetrics.length > 0 && <><div className="modal-divider"><span>历史记录</span></div><div className="modal-record-list">{[...data.healthMetrics].sort((a, b) => `${b.date}${b.time}`.localeCompare(`${a.date}${a.time}`)).map((m) => <div key={m.id}><span className={`schedule-dot ${m.kind === "weight" ? "purple" : m.kind === "bp" ? "pink" : "blue"}`} /><p><strong>{m.kind === "weight" ? "体重" : m.kind === "bp" ? "血压" : "血糖"} {m.kind === "weight" ? `${m.value} kg` : m.kind === "bp" ? `${m.value}/${m.value2 ?? "—"} mmHg` : `${m.value} mmol/L`}</strong><small>{m.date} {m.time}{m.note ? ` · ${m.note}` : ""}</small></p><IconButton label="删除" onClick={() => deleteMetric(m.id)}><Trash2 size={16} /></IconButton></div>)}</div></>}</form>}
+    {modal.kind === "healthGoals" && <div><ModalHead eyebrow="GOALS" title="健康目标" copy="修改后立即生效，用于计算每日达标与连续天数。" /><div className="form-grid"><FormField label="步数目标" name="goalSteps" type="number" min="0" defaultValue={String(data.settings.healthGoals.steps)} onChange={(e) => updateGoal("steps", Math.max(0, Number(e.currentTarget.value) || 0))} /><FormField label="睡眠目标（小时）" name="goalSleepHours" type="number" min="0" step="0.5" defaultValue={String(data.settings.healthGoals.sleepMinutes / 60)} onChange={(e) => updateGoal("sleepMinutes", Math.max(0, Number(e.currentTarget.value) || 0) * 60)} /><FormField label="饮水目标（杯）" name="goalWater" type="number" min="0" defaultValue={String(data.settings.healthGoals.water)} onChange={(e) => updateGoal("water", Math.max(0, Number(e.currentTarget.value) || 0))} /></div><div className="modal-actions"><button type="button" className="button button-primary" onClick={close}>完成</button></div></div>}
+    {modal.kind === "supplements" && <SupplementModal close={close} />}
     {modal.kind === "meal" && <form onSubmit={submit}><ModalHead eyebrow="MEAL PLAN" title={`安排周${modal.payload ?? "五"}餐单`} copy="选择后会写入一周餐桌。" /><FormSelect label="食谱" name="recipe" defaultValue={data.mealPlan[modal.payload ?? "五"]} options={[...recipeCards.map((item) => [item.title, item.title]), ...data.customRecipes.map((item) => [item.title, item.title]), ...data.importedRecipes.map((item) => [item.title, item.title])]} /><ModalActions close={close} label="保存餐单" /></form>}
     {modal.kind === "addRecipe" && (() => {
       const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -188,7 +306,7 @@ function EditorModal({ modal, close }: { modal: Exclude<ModalState, null>; close
       </div>;
     })()}
     {modal.kind === "backup" && <div><ModalHead eyebrow="DATA" title="数据备份与恢复" copy={backupPath ? "备份已生成，可在下方打开所在文件夹。" : "把全部数据导出为 JSON 文件备份，或从备份文件恢复。"} />{backupPath ? <div className="backup-result"><p>备份已保存到：<code>{backupPath}</code></p><div className="modal-actions"><button type="button" className="button button-soft" onClick={() => { void revealInFolder(backupPath); }}><FolderOpen size={15} /> 打开所在文件夹</button><button type="button" className="button button-primary" onClick={() => { setBackupPath(null); close(); }}>完成</button></div></div> : <div className="modal-actions"><button type="button" className="button button-soft" onClick={async () => { const path = await backupData(); if (path) setBackupPath(path); else close(); }}><Download size={15} /> 备份数据</button><label className="button button-primary"><Upload size={15} /> 恢复数据<input type="file" accept=".json,application/json" style={{ display: "none" }} onChange={(event) => { void restoreData(event.target.files?.[0]); event.currentTarget.value = ""; close(); }} /></label></div>}</div>}
-    {modal.kind === "clear" && <div><ModalHead eyebrow="CLEAR" title="清空所有记录" copy="这会删除任务、日程、专注、账单、心情、日记、健康等全部记录，仅保留工作台设置，操作无法撤销。" /><div className="modal-actions"><button type="button" className="button button-soft" onClick={close}>取消</button><button type="button" className="button danger-button" onClick={() => { updateData((current) => ({ ...current, tasks: [], schedule: [], focusSessions: [], ledger: [], moodLogs: {}, diaryEntries: [], health: {}, likedRecipes: [], importedRecipes: [], mealPlan: {}, customWords: [], customRecipes: [], learning: { masteredWords: [], bookmarkedWords: [], studyMinutes: 0, customWords: [] }, books: [], documents: [], noteFolders: [] })); finish("已清空所有记录"); }}>确认清空</button></div></div>}
+    {modal.kind === "clear" && <div><ModalHead eyebrow="CLEAR" title="清空所有记录" copy="这会删除任务、日程、专注、账单、心情、日记、健康等全部记录，仅保留工作台设置，操作无法撤销。" /><div className="modal-actions"><button type="button" className="button button-soft" onClick={close}>取消</button><button type="button" className="button danger-button" onClick={() => { updateData((current) => ({ ...current, tasks: [], schedule: [], focusSessions: [], ledger: [], moodLogs: {}, diaryEntries: [], health: {}, supplements: [], likedRecipes: [], importedRecipes: [], mealPlan: {}, customWords: [], customRecipes: [], learning: { masteredWords: [], bookmarkedWords: [], studyMinutes: 0, customWords: [] }, books: [], documents: [], noteFolders: [] })); finish("已清空所有记录"); }}>确认清空</button></div></div>}
   </section></div>;
 }
 

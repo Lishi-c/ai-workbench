@@ -9,7 +9,7 @@ import type { MoodId, Tone, WorkbenchData } from "../workbench-data";
 import type { HolidayMap } from "./calendar-festivals";
 
 export type PageKey = "dashboard" | "tasks" | "finance" | "recipes" | "health" | "diary" | "focus" | "english" | "library" | "notes";
-export type ModalKind = "plan" | "task" | "schedule" | "transaction" | "budget" | "health" | "settings" | "recipe" | "meal" | "clear" | "backup" | "addRecipe";
+export type ModalKind = "plan" | "task" | "schedule" | "transaction" | "budget" | "health" | "settings" | "recipe" | "meal" | "clear" | "backup" | "addRecipe" | "supplements" | "healthMetric" | "healthGoals";
 export type ModalState = { kind: ModalKind; payload?: string } | null;
 export type NavItem = { key: PageKey; label: string; caption: string; icon: LucideIcon };
 export type WorkbenchContextValue = {

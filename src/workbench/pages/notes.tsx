@@ -1,9 +1,9 @@
-import { ChevronLeft, ChevronRight, Download, Folder, FolderPlus, PenLine, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Folder, FolderOpen, FolderPlus, PenLine, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
 import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createId, dateKey, type Document, type NoteFolder, type Tone, type WorkbenchData } from "../../workbench-data";
 import { useWorkbench } from "../context";
 import { renderMarkdown, MdToolbar } from "./md";
-import { fetchContentText, readTextFile } from "../storage";
+import { fetchContentText, readTextFile, revealInFolder, saveExportFile } from "../storage";
 import { ConfirmDialog, IconButton, PageIntro } from "../ui";
 import { setEscBack, setEscPopup } from "../esc";
 
@@ -173,6 +173,77 @@ const folderTones: { id: Tone; label: string }[] = [
 
 const quickEmojis = ["📁", "📝", "📚", "💡", "🏷️", "⭐", "❤️", "🧠", "💰", "🍱"];
 
+type ExportFormat = "json" | "md" | "txt";
+
+const sanitizeFileName = (s: string) => (s || "").replace(/[\\/:*?"<>|]/g, "_").replace(/[. ]+$/, "").trim() || "无标题";
+
+function buildExportContent(items: Array<{ title: string; content: string }>, format: ExportFormat): string {
+  if (format === "json") return JSON.stringify(items, null, 2);
+  if (format === "md") return items.map((n) => `## ${n.title || "无标题"}\n\n${n.content}`).join("\n\n---\n\n");
+  return items.map((n) => `${n.title || "无标题"}\n\n${n.content}`).join("\n\n---\n\n");
+}
+
+function ExportResultDialog({ path, onClose }: { path: string; onClose: () => void }) {
+  useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = ""; }; }, []);
+  useEffect(() => { setEscPopup(onClose); return () => setEscPopup(null); }, [onClose]);
+  return (
+    <div className="modal-backdrop confirm-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className="editor-modal confirm-modal" role="dialog" aria-modal="true">
+        <IconButton label="关闭" className="modal-close" onClick={onClose}><X size={18} /></IconButton>
+        <header className="modal-head"><span className="section-eyebrow">EXPORT</span><h2>导出成功</h2><p>笔记已导出到以下位置。</p></header>
+        <div className="backup-result"><p>保存路径</p><code>{path}</code></div>
+        <div className="modal-actions">
+          <button type="button" className="button button-soft" onClick={() => { void revealInFolder(path); }}><FolderOpen size={15} /> 打开所在文件夹</button>
+          <button type="button" className="button button-primary" onClick={onClose}>完成</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function NoteExportButton({ doc, variant }: { doc: Document; variant: "button" | "icon" }) {
+  const [open, setOpen] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handle = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, [open]);
+
+  const doExport = async (format: ExportFormat) => {
+    setOpen(false);
+    const content = doc.content || await fetchContentText("doc", doc.id);
+    const items = [{ ...doc, content }];
+    const fileName = `${sanitizeFileName(doc.title)}-${dateKey()}.${format}`;
+    const path = await saveExportFile(buildExportContent(items, format), fileName, format);
+    if (path) setResult(path);
+  };
+
+  return (
+    <>
+      <div className="export-menu" ref={menuRef}>
+        {variant === "icon" ? (
+          <IconButton label="导出笔记" onClick={() => setOpen((v) => !v)}><Download size={15} /></IconButton>
+        ) : (
+          <button type="button" className="button button-soft" onClick={() => setOpen((v) => !v)}><Download size={16} /> 导出</button>
+        )}
+        {open && (
+          <div className="export-menu-pop">
+            <button type="button" onClick={() => { void doExport("json"); }}>JSON<small>无损备份</small></button>
+            <button type="button" onClick={() => { void doExport("md"); }}>Markdown<small>便于阅读</small></button>
+            <button type="button" onClick={() => { void doExport("txt"); }}>TXT<small>纯文本</small></button>
+          </div>
+        )}
+      </div>
+      {result && <ExportResultDialog path={result} onClose={() => setResult(null)} />}
+    </>
+  );
+}
+
 export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | null; onDocHandled?: () => void }) {
   const { data, updateData, notify } = useWorkbench();
   const [viewingDocId, setViewingDocId] = useState<string | null>(null);
@@ -183,6 +254,7 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
   const [confirmDeleteFolderId, setConfirmDeleteFolderId] = useState<string | null>(null);
   const [folderModal, setFolderModal] = useState<{ folderId?: string } | null>(null);
   const [exportOpen, setExportOpen] = useState(false);
+  const [exportResult, setExportResult] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ kind: "folder" | "doc"; id: string } | null>(null);
   const [dropInto, setDropInto] = useState<string | null>(null);
   const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -296,25 +368,12 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
   const removeDoc = (id: string) => { updateData((current) => ({ ...current, documents: current.documents.filter((d) => d.id !== id) })); notify("已删除笔记"); };
   const removeFolder = (id: string, keepContent: boolean) => { updateData((current) => deleteFolder(current, id, keepContent)); notify(keepContent ? "已删除文件夹，内容移回未分类" : "已删除文件夹及其内容"); };
 
-  const exportAsFile = (items: Array<{ title: string; content: string }>, format: "json" | "md" | "txt", name: string, label: string) => {
-    const md = items.map((n) => `## ${n.title || "无标题"}\n\n${n.content}`).join("\n\n---\n\n");
-    const txt = items.map((n) => `${n.title || "无标题"}\n\n${n.content}`).join("\n\n---\n\n");
-    const content = format === "json" ? JSON.stringify(items, null, 2) : format === "md" ? md : txt;
-    const ext = format === "json" ? "json" : format === "md" ? "md" : "txt";
-    const mime = format === "json" ? "application/json" : format === "md" ? "text/markdown" : "text/plain";
-    const blob = new Blob([content], { type: mime });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${name}-${dateKey()}.${ext}`;
-    link.click();
-    URL.revokeObjectURL(url);
-    notify(`已导出 ${items.length} 条${label}`);
-  };
-  const exportDocs = async (format: "json" | "md" | "txt") => {
+  const exportDocs = async (format: ExportFormat) => {
     const scope = mode === "folders" ? currentFolderId : null;
     const items = await Promise.all(collectNotes(data, scope).map(async (d) => ({ ...d, content: d.content || await fetchContentText("doc", d.id) })));
-    exportAsFile(items, format, scope ? "文件夹笔记" : "全部笔记", "笔记");
+    const fileName = `${scope ? "文件夹笔记" : "全部笔记"}-${dateKey()}.${format}`;
+    const path = await saveExportFile(buildExportContent(items, format), fileName, format);
+    if (path) setExportResult(path);
   };
   const importDocs = async (file?: File) => {
     if (!file) return;
@@ -442,6 +501,7 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
                 <div className="doc-card-foot">
                   <small>{item.doc.format.toUpperCase()} · {item.doc.createdAt}</small>
                   <div className="doc-card-actions">
+                    <NoteExportButton doc={item.doc} variant="icon" />
                     <IconButton label="删除笔记" onClick={() => setConfirmDeleteId(item.doc.id)}><Trash2 size={15} /></IconButton>
                   </div>
                 </div>
@@ -462,7 +522,7 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
               <button type="button" className="doc-card-main" onClick={() => setViewingDocId(doc.id)}><h3>{doc.title || "无标题"}</h3><p>{doc.preview || doc.content}</p></button>
               <div className="doc-card-foot">
                 <small>{doc.folderId ? `${data.noteFolders.find((f) => f.id === doc.folderId)?.emoji ?? "📁"} ${data.noteFolders.find((f) => f.id === doc.folderId)?.name ?? "文件夹"} · ` : ""}{doc.format.toUpperCase()} · {doc.createdAt}</small>
-                <div className="doc-card-actions"><IconButton label="删除笔记" onClick={() => setConfirmDeleteId(doc.id)}><Trash2 size={15} /></IconButton></div>
+                <div className="doc-card-actions"><NoteExportButton doc={doc} variant="icon" /><IconButton label="删除笔记" onClick={() => setConfirmDeleteId(doc.id)}><Trash2 size={15} /></IconButton></div>
               </div>
             </article>
           ))}
@@ -473,6 +533,7 @@ export function NotesPage({ openDocId, onDocHandled }: { openDocId?: string | nu
       {confirmDeleteId && <ConfirmDialog title="删除这篇笔记？" copy="删除后无法恢复，且无法撤销。" onCancel={() => setConfirmDeleteId(null)} onConfirm={() => { removeDoc(confirmDeleteId); setConfirmDeleteId(null); }} />}
       {confirmDeleteFolderId && <FolderDeleteDialog folderId={confirmDeleteFolderId} onCancel={() => setConfirmDeleteFolderId(null)} onConfirm={(keepContent) => { removeFolder(confirmDeleteFolderId, keepContent); setConfirmDeleteFolderId(null); }} />}
       {folderModal && <FolderFormModal folderId={folderModal.folderId} parentId={currentFolderId} onClose={() => setFolderModal(null)} />}
+      {exportResult && <ExportResultDialog path={exportResult} onClose={() => setExportResult(null)} />}
     </div>
   );
 }
@@ -587,5 +648,5 @@ export function DocPage({ docId, isNew, onBack }: { docId?: string; isNew?: bool
 
   const removeDoc = () => { updateData((current) => ({ ...current, documents: current.documents.filter((d) => d.id !== docId) })); notify("已删除笔记"); onBack(); };
 
-  return <div className="page-stack page-enter doc-page"><PageIntro eyebrow={(doc?.format ?? "md").toUpperCase()} title={title || "无标题"} copy={doc ? `${doc.format} 文件 · ${doc.createdAt}` : "新建 Markdown 笔记"} actions={<div className="page-action-group">{!editing && <button className="button button-soft" onClick={() => setEditing(true)}><PenLine size={16} /> 编辑</button>}<button className="button button-soft" onClick={onBack}><ChevronLeft size={16} /> 返回</button></div>} />{editing ? <form onSubmit={(event) => { event.preventDefault(); save(); }}><div className="form-grid"><label className="form-field full-field"><span>标题</span><input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="笔记标题" /></label><label className="form-field full-field"><span>所属文件夹</span><select value={folderId ?? ""} onChange={(event) => setFolderId(event.target.value || null)}><option value="">未分类</option>{folderOptions(data).map((o) => <option value={o.id} key={o.id}>{o.indent}{o.label}</option>)}</select></label><div className="form-field full-field"><span>正文</span><MdToolbar elRef={contentRef} set={setContent} /><textarea ref={contentRef} value={content} onChange={(event) => setContent(event.target.value)} rows={18} required /></div></div><div className="modal-actions"><button type="button" className="button button-soft" onClick={() => { if (docId) setEditing(false); else onBack(); }}>取消</button><button type="submit" className="button button-primary">保存</button></div></form> : <section className="panel doc-page-body">{renderContent()}</section>}{!editing && docId && <div className="doc-page-footer"><button type="button" className="button button-soft" onClick={() => setConfirmingDelete(true)}><Trash2 size={16} /> 删除笔记</button></div>}{confirmingDelete && <ConfirmDialog title="删除这篇笔记？" copy="删除后无法恢复，且无法撤销。" onCancel={() => setConfirmingDelete(false)} onConfirm={removeDoc} />}</div>;
+  return <div className="page-stack page-enter doc-page"><PageIntro eyebrow={(doc?.format ?? "md").toUpperCase()} title={title || "无标题"} copy={doc ? `${doc.format} 文件 · ${doc.createdAt}` : "新建 Markdown 笔记"} actions={<div className="page-action-group">{doc && !editing && <NoteExportButton doc={{ ...doc, content }} variant="button" />}{!editing && <button className="button button-soft" onClick={() => setEditing(true)}><PenLine size={16} /> 编辑</button>}<button className="button button-soft" onClick={onBack}><ChevronLeft size={16} /> 返回</button></div>} />{editing ? <form onSubmit={(event) => { event.preventDefault(); save(); }}><div className="form-grid"><label className="form-field full-field"><span>标题</span><input value={title} onChange={(event) => setTitle(event.target.value)} required placeholder="笔记标题" /></label><label className="form-field full-field"><span>所属文件夹</span><select value={folderId ?? ""} onChange={(event) => setFolderId(event.target.value || null)}><option value="">未分类</option>{folderOptions(data).map((o) => <option value={o.id} key={o.id}>{o.indent}{o.label}</option>)}</select></label><div className="form-field full-field"><span>正文</span><MdToolbar elRef={contentRef} set={setContent} /><textarea ref={contentRef} value={content} onChange={(event) => setContent(event.target.value)} rows={18} required /></div></div><div className="modal-actions"><button type="button" className="button button-soft" onClick={() => { if (docId) setEditing(false); else onBack(); }}>取消</button><button type="submit" className="button button-primary">保存</button></div></form> : <section className="panel doc-page-body">{renderContent()}</section>}{!editing && docId && <div className="doc-page-footer"><button type="button" className="button button-soft" onClick={() => setConfirmingDelete(true)}><Trash2 size={16} /> 删除笔记</button></div>}{confirmingDelete && <ConfirmDialog title="删除这篇笔记？" copy="删除后无法恢复，且无法撤销。" onCancel={() => setConfirmingDelete(false)} onConfirm={removeDoc} />}</div>;
 }

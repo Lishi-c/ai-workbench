@@ -14,7 +14,7 @@ use tauri::{
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_dialog::DialogExt;
-use chrono::Timelike;
+use chrono::{Datelike, Timelike};
 
 static IS_QUITTING: AtomicBool = AtomicBool::new(false);
 
@@ -253,6 +253,30 @@ fn save_backup(app: AppHandle, json: String, file_name: String) -> Result<Option
     };
     let path = picked.into_path().map_err(|e| e.to_string())?;
     fs::write(&path, json).map_err(|e| e.to_string())?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+// 导出笔记/文本到用户指定位置：弹「另存为」对话框，按格式设过滤器，返回保存路径；取消返回 None
+#[tauri::command]
+fn save_export(app: AppHandle, content: String, file_name: String, format: String) -> Result<Option<String>, String> {
+    let (filter_name, ext) = match format.as_str() {
+        "md" => ("Markdown", "md"),
+        "txt" => ("文本文件", "txt"),
+        _ => ("JSON", "json"),
+    };
+    let mut builder = app
+        .dialog()
+        .file()
+        .set_file_name(&file_name)
+        .add_filter(filter_name, &[ext]);
+    if let Ok(dir) = data_dir(&app) {
+        builder = builder.set_directory(dir);
+    }
+    let Some(picked) = builder.blocking_save_file() else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())?;
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
@@ -620,6 +644,51 @@ fn check_reminders(app: &AppHandle, today: &str, notified: &mut HashSet<String>)
             }
         }
     }
+    if let Some(supps) = data.get("supplements").and_then(Value::as_array) {
+        let weekday_now = now.weekday().num_days_from_sunday() as u64;
+        for s in supps {
+            if !s.get("enabled").and_then(Value::as_bool).unwrap_or(true) {
+                continue;
+            }
+            let (Some(id), Some(name)) = (
+                s.get("id").and_then(Value::as_str),
+                s.get("name").and_then(Value::as_str),
+            ) else {
+                continue;
+            };
+            if let Some(wds) = s.get("weekdays").and_then(Value::as_array) {
+                if !wds.is_empty() && !wds.iter().any(|w| w.as_u64() == Some(weekday_now)) {
+                    continue;
+                }
+            }
+            let dose = s.get("dose").and_then(Value::as_str).unwrap_or("");
+            let Some(times) = s.get("times").and_then(Value::as_array) else { continue; };
+            let taken: Vec<&str> = s
+                .get("logs")
+                .and_then(|l| l.get(today))
+                .and_then(Value::as_array)
+                .map(|arr| arr.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            for t in times {
+                let Some(time) = t.as_str() else { continue };
+                if taken.contains(&time) {
+                    continue;
+                }
+                let trigger = minutes_of_day(time);
+                if now_min >= trigger && now_min - trigger <= 30 {
+                    let key = format!("supp-{id}-{time}");
+                    if notified.insert(key) {
+                        let body = if dose.is_empty() {
+                            format!("{time} · {name}")
+                        } else {
+                            format!("{time} · {name} · {dose}")
+                        };
+                        show_notification(app, "补剂提醒", &body);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn spawn_background(app: AppHandle) {
@@ -664,6 +733,7 @@ pub fn run() {
             get_content,
             get_holidays,
             save_backup,
+            save_export,
             reveal_in_folder,
             get_app_version,
             check_for_updates,

@@ -328,6 +328,7 @@
 .moonblue-glass .tone-purple { background: #e5eef5; }
 .moonblue-glass .tone-pink { background: #f1e3ea; }
 .moonblue-glass .tone-blue { background: #e2eef6; }
+.moonblue-glass .health-card.tone-blue { background: #aac5f0; }
 .moonblue-glass .tone-sand { background: #eef0ed; }
 .moonblue-glass .tone-sage { background: #e4ede9; }
 
@@ -513,10 +514,8 @@
 .moonblue-glass .category-ring { background: conic-gradient(var(--signal-blue) 0deg var(--progress), #e4ebf0 var(--progress) 360deg); }
 .moonblue-glass .progress-ring::before,
 .moonblue-glass .category-ring::before { background: #f6f9fa; box-shadow: none; }
-.moonblue-glass .mini-bar,
-.moonblue-glass .activity-bar-main { background: linear-gradient(180deg, #62a9d9, #a5cee8); box-shadow: none; }
-.moonblue-glass .bars-pink .mini-bar,
-.moonblue-glass .activity-bar-soft { background: linear-gradient(180deg, #d877a2, #e8b6cc); }
+.moonblue-glass .mini-bar { background: linear-gradient(180deg, #62a9d9, #a5cee8); box-shadow: none; }
+.moonblue-glass .bars-pink .mini-bar { background: linear-gradient(180deg, #d877a2, #e8b6cc); }
 
 .moonblue-glass .recipe-feature { overflow: hidden; border: 1px solid rgba(255,255,255,.72); background: linear-gradient(118deg, rgba(244,248,249,.95), rgba(225,237,244,.82)); box-shadow: 0 14px 35px rgba(35,62,87,.06); }
 .moonblue-glass .recipe-feature::after { background: linear-gradient(90deg, rgba(245,249,250,.99) 0%, rgba(245,249,250,.98) 48%, rgba(239,245,248,.52) 64%, rgba(239,245,248,.06) 86%, transparent 97%); }
