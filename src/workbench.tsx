@@ -5,6 +5,7 @@ import { bottomItems, navSections, type ModalState, type PageKey, type Workbench
 import { CommandPalette, EditorModal, ReminderPanel } from "./workbench/overlays";
 import { Onboarding } from "./workbench/onboarding";
 import { DashboardPage, DiaryPage, EnglishPage, FinancePage, FocusPage, HealthPage, LibraryPage, NotesPage, RecipesPage, TasksPage } from "./workbench/pages";
+import { renderMarkdown } from "./workbench/pages/md";
 import { checkForUpdates, downloadUpdate, fetchHolidays, installUpdate, loadLocalData, saveLocalData } from "./workbench/storage";
 import type { HolidayMap } from "./workbench/calendar-festivals";
 import { IconButton, WorkspaceTitle } from "./workbench/ui";
@@ -33,6 +34,7 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [modal, setModal] = useState<ModalState>(null);
   const [toast, setToast] = useState("");
+  const [updatePrompt, setUpdatePrompt] = useState<null | { version: string; notes: string; downloadUrl: string; fileName: string }>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [openNoteId, setOpenNoteId] = useState<string | null>(null);
   const [openBookId, setOpenBookId] = useState<string | null>(null);
@@ -67,22 +69,17 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
   }, []);
 
   useEffect(() => {
+    if (!hydrated) return;
     let active = true;
     void (async () => {
       const info = await checkForUpdates();
       if (!active || !info?.has_update || !info.download_url) return;
-      setToast(`发现新版本 v${info.latest_version}，正在下载…`);
-      const path = await downloadUpdate(info.download_url, info.file_name);
-      if (!active) return;
-      if (!path) { setToast("新版本下载失败，可稍后在偏好设置里重试"); return; }
-      if (window.confirm(`已下载新版本 v${info.latest_version}，是否立即安装？\n（安装会关闭工作台并运行安装程序）`)) {
-        void installUpdate(path);
-      } else {
-        setToast("新版本已下载，稍后可在偏好设置里安装");
-      }
+      if (info.latest_version === data.settings.updatePromptVersion) return;
+      setUpdatePrompt({ version: info.latest_version, notes: info.notes, downloadUrl: info.download_url, fileName: info.file_name });
+      setData((current) => ({ ...current, settings: { ...current.settings, updatePromptVersion: info.latest_version } }));
     })();
     return () => { active = false; };
-  }, []);
+  }, [hydrated]);
 
   const loadHolidays = useCallback((year: number) => {
     void fetchHolidays(year).then((map) => setHolidays((prev) => ({ ...prev, ...map })));
@@ -134,6 +131,20 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
   const openNote = (id: string) => { setOpenNoteId(id); navigate("notes"); setPaletteOpen(false); };
   const openBook = (id: string) => { setOpenBookId(id); navigate("library"); setPaletteOpen(false); };
   const finishOnboarding = () => { setData((current) => ({ ...current, settings: { ...current.settings, onboardingDone: true } })); setOnboardingOpen(false); };
+  const dismissUpdate = () => setUpdatePrompt(null);
+  const doUpdate = async () => {
+    const prompt = updatePrompt;
+    if (!prompt) return;
+    setUpdatePrompt(null);
+    setToast(`正在下载 v${prompt.version}…`);
+    const path = await downloadUpdate(prompt.downloadUrl, prompt.fileName);
+    if (!path) { setToast("下载失败，可到偏好设置重试"); return; }
+    if (window.confirm(`已下载 v${prompt.version}，是否立即安装？\n（安装会关闭工作台并运行安装程序）`)) {
+      void installUpdate(path);
+    } else {
+      setToast("新版本已下载，稍后可在偏好设置里安装");
+    }
+  };
   const context = useMemo<WorkbenchContextValue>(() => ({ data, updateData: setData, navigate, openModal: (kind, payload) => setModal({ kind, payload }), notify: setToast, holidays, loadHolidays, openOnboarding: () => setOnboardingOpen(true) }), [data, holidays, loadHolidays]);
   const isMoonblue = skinClassName.split(" ").includes("moonblue-glass");
   const activeItem = navItems.find((item) => item.key === activePage);
@@ -183,6 +194,7 @@ export default function Workbench({ skinClassName = "", skinLabel }: WorkbenchPr
       {modal && <EditorModal modal={modal} close={() => setModal(null)} />}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} navItems={navItems} data={data} navigate={navigate} openNote={openNote} openBook={openBook} />
       {toast && <div className="app-toast" role="status"><CheckCircle2 size={17} />{toast}</div>}
+      {updatePrompt && <div className="update-banner" role="status" aria-label="新版本更新提示"><div className="update-banner-head"><strong>发现新版本 v{updatePrompt.version}</strong></div>{updatePrompt.notes ? <div className="update-banner-notes" dangerouslySetInnerHTML={{ __html: renderMarkdown(updatePrompt.notes) }} /> : null}<div className="update-banner-actions"><button type="button" className="button button-soft" onClick={dismissUpdate}>忽略</button><button type="button" className="button button-primary" onClick={doUpdate}>去更新</button></div></div>}
     </div>
   </WorkbenchContext.Provider>;
 }

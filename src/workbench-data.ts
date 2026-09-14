@@ -158,6 +158,7 @@ export type WorkbenchData = {
     theme: "light" | "dark";
     autoLaunch: boolean;
     onboardingDone: boolean;
+    updatePromptVersion: string;
     healthGoals: { steps: number; sleepMinutes: number; water: number };
   };
   tasks: WorkbenchTask[];
@@ -219,6 +220,7 @@ export function createDefaultWorkbenchData(): WorkbenchData {
       theme: "light",
       autoLaunch: true,
       onboardingDone: false,
+      updatePromptVersion: "",
       healthGoals: { steps: 10000, sleepMinutes: 420, water: 8 },
     },
     tasks: [

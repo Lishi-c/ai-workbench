@@ -141,6 +141,7 @@ export type UpdateInfo = {
   latest_version: string;
   download_url: string;
   html_url: string;
+  notes: string;
   file_name: string;
 };
 

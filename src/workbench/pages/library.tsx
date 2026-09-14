@@ -83,8 +83,6 @@ export function BookPage({ bookId, onBack }: { bookId: string; onBack: () => voi
   }, [bookId]);
   useEffect(() => { window.scrollTo(0, 0); }, [page]);
 
-  if (!book) return <div className="page-stack page-enter"><PageIntro eyebrow="LIBRARY" title="图书不存在" copy="这本书可能已被删除。" actions={<button className="button button-soft" onClick={onBack}><ChevronLeft size={16} /> 返回</button>} /></div>;
-
   const CHUNK_SIZE = 1000;
   const chunks = useMemo(() => {
     const text = content;
@@ -105,13 +103,8 @@ export function BookPage({ bookId, onBack }: { bookId: string; onBack: () => voi
   const totalPages = chunks.length;
   const current = chunks[page] ?? "";
 
-  const renderChunk = (chunk: string) => {
-    if (book.format === "md") return <div className="doc-view-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(chunk) }} />;
-    return <pre className="doc-view-text">{chunk}</pre>;
-  };
-
   const commit = (opts?: { finished?: boolean }) => {
-    const progress = opts?.finished ? 100 : totalPages > 1 ? Math.round(((page + 1) / totalPages) * 100) : (book.progress || 0);
+    const progress = opts?.finished ? 100 : totalPages > 1 ? Math.round(((page + 1) / totalPages) * 100) : (book?.progress || 0);
     updateData((current) => ({
       ...current,
       books: current.books.map((b) => {
@@ -124,6 +117,13 @@ export function BookPage({ bookId, onBack }: { bookId: string; onBack: () => voi
 
   // 离开阅读页时自动保存当前进度
   useEffect(() => () => { commit(); }, [page, bookId]);
+
+  if (!book) return <div className="page-stack page-enter"><PageIntro eyebrow="LIBRARY" title="图书不存在" copy="这本书可能已被删除。" actions={<button className="button button-soft" onClick={onBack}><ChevronLeft size={16} /> 返回</button>} /></div>;
+
+  const renderChunk = (chunk: string) => {
+    if (book.format === "md") return <div className="doc-view-md" dangerouslySetInnerHTML={{ __html: renderMarkdown(chunk) }} />;
+    return <pre className="doc-view-text">{chunk}</pre>;
+  };
 
   const removeBook = () => { updateData((current) => ({ ...current, books: current.books.filter((b) => b.id !== bookId) })); notify("已删除图书"); onBack(); };
   const notes = book.notes ?? [];

@@ -371,6 +371,7 @@ struct UpdateInfo {
     latest_version: String,
     download_url: String,
     html_url: String,
+    notes: String,
     file_name: String,
 }
 
@@ -426,6 +427,11 @@ async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, String> {
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
+    let notes = json
+        .get("body")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
 
     let mut download_url = String::new();
     let mut file_name = String::new();
@@ -452,6 +458,7 @@ async fn check_for_updates(app: AppHandle) -> Result<UpdateInfo, String> {
         latest_version,
         download_url,
         html_url,
+        notes,
         file_name,
     })
 }
