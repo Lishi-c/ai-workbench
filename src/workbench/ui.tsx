@@ -52,16 +52,29 @@ export function TaskRow({ task, compact = false }: { task: WorkbenchTask; compac
         const offset = task.repeat === "daily" ? 1 : task.repeat === "weekly" ? 7 : 30;
         const d = new Date(`${task.date}T12:00:00`);
         d.setDate(d.getDate() + offset);
-        tasks = [...tasks, { ...task, id: createId("task"), date: dateKey(d), done: false }];
+        const nextDate = dateKey(d);
+        const alreadyGenerated = tasks.some((item) => item.title === task.title && item.date === nextDate && item.repeat === task.repeat);
+        if (!alreadyGenerated) {
+          tasks = [...tasks, { ...task, id: createId("task"), date: nextDate, done: false }];
+        }
       }
       return { ...current, tasks };
     });
     notify(task.done ? "任务已恢复为待完成" : task.repeat ? "任务已完成，已自动生成下一次" : "任务已完成，仪表盘进度已同步");
   };
   const remove = () => {
-    updateData((current) => ({ ...current, tasks: current.tasks.filter((item) => item.id !== task.id) }));
+    const today = dateKey();
+    const recurring = Boolean(task.repeat);
+    updateData((current) => {
+      const tasks = current.tasks.filter((item) => {
+        if (item.id === task.id) return false;
+        if (recurring && item.repeat === task.repeat && item.title === task.title && item.date >= today) return false;
+        return true;
+      });
+      return { ...current, tasks };
+    });
     setConfirming(false);
-    notify("已删除任务");
+    notify(recurring ? "已删除该重复任务及后续副本" : "已删除任务");
   };
   return <div className={`task-row ${task.done ? "is-done" : ""} ${compact ? "is-compact" : ""}`} role="button" tabIndex={0} onClick={toggle} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); toggle(); } }}><span className={`task-check tone-${task.tone}`}>{task.done && <Check size={14} strokeWidth={3} />}</span><span className="task-copy"><strong>{task.title}</strong><small>{task.meta}</small></span><span className={`task-tag tone-${task.tone}`}>{task.repeat ? `${task.tag} · ${task.repeat === "daily" ? "每天" : task.repeat === "weekly" ? "每周" : "每月"}` : task.tag}</span><time>{task.time}</time><div className="task-more" ref={menuRef} onClick={(event) => event.stopPropagation()}><IconButton label="更多操作" onClick={() => setMenuOpen((v) => !v)}><MoreHorizontal size={16} /></IconButton>{menuOpen && <div className="task-more-pop"><button type="button" onClick={() => { setMenuOpen(false); setConfirming(true); }}><Trash2 size={14} /> 删除任务</button></div>}</div>{confirming && <ConfirmDialog title="删除这个任务？" copy="删除后无法恢复，且无法撤销。" onCancel={() => setConfirming(false)} onConfirm={remove} />}</div>;
 }
@@ -74,4 +87,4 @@ export function FormSelect({ label, name, options, defaultValue }: { label: stri
 
 export function ModalActions({ close, label }: { close: () => void; label: string }) { return <div className="modal-actions"><button type="button" className="button button-soft" onClick={close}>取消</button><button type="submit" className="button button-primary">{label}</button></div>; }
 
-export function ConfirmDialog({ title, copy, confirmLabel = "删除", onCancel, onConfirm }: { title: string; copy: string; confirmLabel?: string; onCancel: () => void; onConfirm: () => void }) { useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = ""; }; }, []); useEffect(() => { setEscPopup(onCancel); return () => setEscPopup(null); }, [onCancel]); return <div className="modal-backdrop confirm-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()}><section className="editor-modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title"><IconButton label="关闭" className="modal-close" onClick={onCancel}><X size={18} /></IconButton><header className="modal-head"><span className="section-eyebrow">CONFIRM</span><h2 id="confirm-title">{title}</h2><p>{copy}</p></header><div className="modal-actions"><button type="button" className="button button-soft" onClick={onCancel}>取消</button><button type="button" className="button danger-button" onClick={onConfirm}><Trash2 size={15} /> {confirmLabel}</button></div></section></div>; }
+export function ConfirmDialog({ title, copy, confirmLabel = "删除", onCancel, onConfirm }: { title: string; copy: string; confirmLabel?: string; onCancel: () => void; onConfirm: () => void }) { useEffect(() => { document.body.style.overflow = "hidden"; return () => { document.body.style.overflow = ""; }; }, []); useEffect(() => { setEscPopup(onCancel); return () => setEscPopup(null); }, [onCancel]); return <div className="modal-backdrop confirm-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onCancel()} onClick={(event) => event.stopPropagation()}><section className="editor-modal confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title"><IconButton label="关闭" className="modal-close" onClick={onCancel}><X size={18} /></IconButton><header className="modal-head"><span className="section-eyebrow">CONFIRM</span><h2 id="confirm-title">{title}</h2><p>{copy}</p></header><div className="modal-actions"><button type="button" className="button button-soft" onClick={onCancel}>取消</button><button type="button" className="button danger-button" onClick={onConfirm}><Trash2 size={15} /> {confirmLabel}</button></div></section></div>; }
