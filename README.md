@@ -1,6 +1,6 @@
 # 月蓝琉璃工作台（Moonblue Glass Workbench）
 
-> 本地优先的个人工作台桌面应用 —— 任务、财务、健康、日记、专注、英语、图书、笔记，一站式管理，**数据全部存本机文件，无后端、无云端、无需联网**。
+> 本地优先的个人工作台桌面应用 —— 任务、财务、健康、日记、专注、英语、图书、笔记，一站式管理，**数据全部存本机文件，无云端服务、无需联网**。
 
 ![仪表盘](docs/screenshots/dashboard.png)
 
@@ -72,36 +72,29 @@
 
 - **前端**：Vite + React 18 + TypeScript
 - **UI**：Radix UI + shadcn 风格组件 + Tailwind CSS
-- **桌面**：Electron（打包为 Windows 便携版 exe）
+- **桌面**：Tauri 2（Rust 后端，打包为 Windows NSIS 安装版）
 - **数据**：本地 JSON 文件 + 大文本拆分存储
 
 ## 数据存储
 
-数据存系统用户数据目录 `%APPDATA%\月蓝琉璃工作台\`：
+采用便携模式，数据存放在程序（exe）同级的 `data/` 目录，整包拷贝即可迁移：
 
-- `workbench-data.json` — 主数据（元信息）
+- `workbench-data.json` — 主数据
 - `content/` — 图书/笔记正文（大文本拆分存储）
 - `backups/` — 自动备份（退出时 + 每天，保留最近 10 份）
 
-换电脑迁移：应用内「数据备份」导出 JSON → 新电脑「数据备份」导入。
+首次以便携模式启动时，若检测到旧版 AppData 数据会自动迁移过来。换电脑迁移：直接拷贝整个应用目录（含 `data/`），或在应用内「数据备份」导出 JSON → 新电脑「数据备份」导入。
 
 ## 本地开发
 
 ```bash
-npm install          # 安装依赖（Node 18+）
-npx vite --host 127.0.0.1 --port 5173   # 起开发服务器
-npx electron .       # Electron 调试
-npm run build:web    # 构建前端产物
+npm install          # 安装依赖（Node 18+，并需 Rust 工具链 1.77+）
+npx tauri dev        # 启动桌面应用（自动拉起 vite 前端并打开窗口）
+npx vite --host 127.0.0.1 --port 5173   # 仅起前端开发服务器
 npm test             # 单测（账单 CSV 解析）
-npm run dist         # 打包便携版 exe（版本号自动 +1）
+npm run lint         # 类型检查 + Biome 代码规范检查
+npx tauri build      # 打包 Windows 安装版（NSIS，自动先构建前端产物）
 ```
-
-> 打包注意：`npm run dist` 前先停掉正在跑的 vite 开发服务器；国内需设镜像：
->
-> ```bash
-> ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
-> ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/
-> ```
 
 ## 目录结构
 
@@ -109,13 +102,13 @@ npm run dist         # 打包便携版 exe（版本号自动 +1）
 ├── src/                 # React 前端源码
 │   └── workbench/       # 工作台核心（context/storage/pages/overlays）
 │       └── pages/       # 各页面（dashboard/tasks/finance/… 10 个页面）
-├── electron/            # Electron 主进程（本地 HTTP 服务 + 数据读写/备份/提醒）
-├── scripts/             # 打包辅助脚本（版本号 bump、清理、图标生成）
+├── src-tauri/           # Tauri 2 Rust 后端（数据读写/备份恢复、托盘/通知、更新检查等）
+├── scripts/             # 辅助脚本（图标生成、截图）
 ├── build/               # 应用图标源文件
 ├── docs/screenshots/    # README 配图
-└── electron-builder.yml # 打包配置
+└── tauri.conf.json      # Tauri 打包配置
 ```
 
 ## 隐私
 
-应用完全本地运行：无后端、无遥测、不上传任何个人数据。仅「调休」功能会向 `timor.tech` 拉取节假日数据（请求只含年份、不含个人数据，失败静默降级为只显示传统节日）。
+应用完全本地运行：无云端服务、无遥测、不上传任何个人数据。仅「调休」功能会向 `timor.tech` 拉取节假日数据（请求只含年份、不含个人数据，失败静默降级为只显示传统节日）。
